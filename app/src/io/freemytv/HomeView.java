@@ -12,6 +12,7 @@ import android.graphics.Path;
 import android.graphics.RectF;
 import android.graphics.Shader;
 import android.media.tv.TvInputManager;
+import android.net.Uri;
 import android.os.Handler;
 import android.os.Looper;
 import android.os.SystemClock;
@@ -118,7 +119,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
     private final Spring[] cardFocus = new Spring[3];
     private final RectF[] cardRects = new RectF[3];
     private final List<HomeApps.Item> lightButtons = new ArrayList<>();
-    private Paint lTitle, lTab, lTabOn, lCardTitle, lCardMeta, lQuote, lTip;
+    private Paint lTitle, lTab, lTabOn, lCardTitle, lCardMeta, lQuote, lTip, lWx;
     private Shader lightGradient;
 
     // Shelf
@@ -137,6 +138,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         TILE_STYLE.put("max", new int[] {0xFF5C30E8, 0xFF221684, 0});
         TILE_STYLE.put("appletv", new int[] {0xFF1C1C1E, 0xFF000000, 0});
     }
+    private static final int[] DARK_TILE = {0xFF212121, 0xFF0F0F0F, 0};
     private final android.graphics.PorterDuffColorFilter whiteLogo =
             new android.graphics.PorterDuffColorFilter(0xFFFFFFFF, android.graphics.PorterDuff.Mode.SRC_IN);
     private final RectF platterRect = new RectF();
@@ -331,6 +333,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         recs.refreshIfStale();
         if (tvInputs != null) tvInputs.registerCallback(inputCallback, handler);
         handler.postDelayed(tick, 15_000);
+        handler.postDelayed(rotate, ROTATE_MS);
         checkNotices();
         reload();
         updatePalette();
@@ -347,6 +350,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         running = false;
         Choreographer.getInstance().removeFrameCallback(this);
         handler.removeCallbacks(tick);
+        handler.removeCallbacks(rotate);
         data.removeListener(this);
         recs.removeListener(this);
         if (tvInputs != null) tvInputs.unregisterCallback(inputCallback);
@@ -487,6 +491,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         lCardMeta = Ui.text(Ui.medium, 25 * k, L_DIM);
         lQuote = Ui.numbers(Ui.regular, 21 * k, L_FAINT);
         lTip = Ui.text(Ui.semibold, 25 * k, L_INK);
+        lWx = Ui.text(Ui.semibold, 28 * k, L_INK);
         lTip.setTextAlign(Paint.Align.CENTER);
         lightGradient = null;
         buttonPaint = Ui.text(Ui.semibold, 29 * k, INK);
@@ -561,7 +566,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         // glass shows the background where it ended up.
         if (tilesMoving || tilesDirty) tiles.invalidate();
         if (statusMoving || statusDirty || bgFading) status.invalidate();
-        if (heroMoving || heroDirty || heroFading) heroLayer.invalidate();
+        if (heroMoving || heroDirty || heroFading || cardsFading()) heroLayer.invalidate();
         if (drawerItemsMoving || drawerDirty || bgFading) drawerLayer.invalidate();
         if (gridMoving || gridDirty) sheetLayer.invalidate();
         if (drawerMoving || bgFading) sky.invalidate();
@@ -1026,6 +1031,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
 
     /** Coin logo + price in the configured currency, in a row at the right end of the tab bar. */
     private void drawQuotes(Canvas c) {
+        if (HomeData.coinCount() == 0) return;
         float right = platterRect.isEmpty() ? CONTENT_R * k : platterRect.right - SHELF_PAD * k;
         applyTone();
         Paint text = lQuote;
@@ -1102,6 +1108,11 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         c.drawRoundRect(tmp, r0, r0, shadowDeep);
         c.restore();
         int[] style = TILE_STYLE.get(it.key);
+        // The white tile needs the dark version of the logo (assets/logos/<key>-dark.png); without it, a logo lifted
+        // from the TV art has white letters, so it goes on a dark tile instead.
+        if (style != null && style[2] == 2 && it.logoDark == null) style = DARK_TILE;
+        // Your look: every app on the same black gradient tile, its logo in its own colors.
+        if (it.logo != null) style = DARK_TILE;
         if (it.logo != null && style != null) {
             tileFill.setShader(new LinearGradient(0, cell.top, 0, cell.bottom, style[0], style[1], Shader.TileMode.CLAMP));
             c.drawRoundRect(cell, r, r, tileFill);
@@ -1223,6 +1234,8 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
             x += tw + gap;
         }
         float cardsTop = CARDS_TOP * k, split = left + (right - left) * 0.585f;
+        // Without prices, the weather card takes the whole row.
+        if (HomeData.coinCount() == 0) split = right + 16 * k;
         weatherCard.set(left, cardsTop, split - 16 * k, cardsTop + CARDS_H * k);
         quotesCard.set(split + 16 * k, cardsTop, right, cardsTop + CARDS_H * k);
         drawerDirty = true;
@@ -1287,7 +1300,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         for (int i = 0; i < drawerItems.size(); i++) if (i != top) drawDrawerTile(c, i);
         if (top >= 0) drawDrawerTile(c, top);
         drawWeatherCard(c, weatherCard);
-        drawQuotesCard(c, quotesCard);
+        if (HomeData.coinCount() > 0) drawQuotesCard(c, quotesCard);
     }
 
     /** Square drawer button: symbol and name; an input with no device is dimmed. Focused: white, with dark text. */
@@ -1648,10 +1661,15 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
                 // app opens nothing.
                 if (down) {
                     if (e.getRepeatCount() == 0) okDown = true;
+                    // Held (the first key repeat): add or remove the focused app from the shelf instead of opening it.
+                    else if (okDown && e.getRepeatCount() == 1 && editDock()) okDown = false;
                 } else {
                     if (okDown && !e.isCanceled()) activate();
                     okDown = false;
                 }
+                return true;
+            case KeyEvent.KEYCODE_MENU:
+                if (down && e.getRepeatCount() == 0) editDock();
                 return true;
             case KeyEvent.KEYCODE_BACK:
                 if (down) {
@@ -1666,7 +1684,58 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         }
     }
 
+    /**
+     * Hold OK (or Menu) on an app: on the shelf it leaves the shelf; in All Apps it joins the end of the shelf.
+     * False when the focused thing isn't an app (then the long press does nothing special).
+     */
+    private boolean editDock() {
+        final Context c = getContext().getApplicationContext();
+        final HomeApps.Item it;
+        final boolean add;
+        if (sheetOpen) {
+            if (gridIndex >= others.size()) return false;
+            it = others.get(gridIndex);
+            add = true;
+        } else if (zone == Z_SHELF && !shelf.isEmpty()) {
+            it = shelf.get(shelfIndex);
+            add = false;
+        } else {
+            return false;
+        }
+        if (it.kind != HomeApps.APP || it.pkg == null) return false;
+        click.open();
+        LOADER.execute(() -> {
+            final boolean ok;
+            if (add) {
+                ok = HomeApps.addToDock(c, it.pkg);
+            } else {
+                HomeApps.removeFromDock(c, it.pkg);
+                ok = true;
+            }
+            final List<HomeApps.Item> s = HomeApps.shelf(c, true);
+            final List<HomeApps.Item> o = HomeApps.others(c);
+            handler.post(() -> {
+                setShelf(s);
+                setOthers(o);
+                if (!ok) {
+                    showToast(Ui.tr("O Início já tem o máximo de apps. Segure OK num app do Início para tirá-lo.",
+                            "The shelf is full. Hold OK on a shelf app to remove it."));
+                } else if (add) {
+                    showToast(it.label + Ui.tr(" foi para o Início.", " is on the shelf now."));
+                } else {
+                    showToast(it.label + Ui.tr(" saiu do Início. Para voltar, segure OK nele em Todos os Apps.",
+                            " left the shelf. To bring it back, hold OK on it in All Apps."));
+                }
+            });
+        });
+        return true;
+    }
+
     private void back() {
+        if (closeSynopsis()) {
+            click.move();
+            return;
+        }
         if (sheetOpen) {
             closeSheet();
         } else if (zone == Z_DRAWER) {
@@ -1682,6 +1751,12 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
     }
 
     private void move(int dx, int dy) {
+        closeSynopsis();
+        moveFocus(dx, dy);
+        if (!sheetOpen && zone == Z_CARDS) openSynopsis(cardIndex);
+    }
+
+    private void moveFocus(int dx, int dy) {
         if (sheetOpen) {
             moveGrid(dx, dy);
             return;
@@ -1794,6 +1869,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
             Recs.Pick p = currentPick();
             if (p == null || p.pkg == null) return;
             it = HomeApps.app(p.pkg, Recs.serviceName(p));
+            if (p.video != null) it.uri = "https://www.youtube.com/watch?v=" + p.video;
             r = heroButton;
         } else if (zone == Z_STATUS) {
             if (statusItems.isEmpty()) return;
@@ -1812,8 +1888,12 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
             r = topRects[topIndex];
         } else if (zone == Z_CARDS) {
             Recs.Pick p = cardIndex < cards.size() ? cards.get(cardIndex) : null;
-            if (p == null || p.pkg == null) return;
-            it = HomeApps.app(p.pkg, Recs.serviceName(p));
+            if (p == null) return;
+            // The synopsis shows while the card has focus; OK plays the trailer on YouTube (dubbed first, then
+            // subtitled) or, when TMDB has none, opens YouTube's search for it.
+            it = HomeApps.app("com.google.android.youtube.tv", "YouTube");
+            it.uri = p.trailer != null ? "https://www.youtube.com/watch?v=" + p.trailer
+                    : "https://www.youtube.com/results?search_query=" + Uri.encode(p.title + " trailer oficial dublado");
             r = cardRects[cardIndex];
         } else {
             if (shelf.isEmpty()) return;
@@ -1866,9 +1946,90 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         heroDirty = statusDirty = true;
     }
 
+    /**
+     * Every ROTATE_MS one card changes, taking turns (big, middle, right), through every pick of the tab; they hold
+     * still while focused.
+     */
+    private static final long ROTATE_MS = 5000;
+    private final int[] slots = {0, 1, 2};
+    private int rotation = 3, turn;
+    private final Runnable rotate = new Runnable() {
+        @Override public void run() {
+            if (!running) return;
+            if (!sheetOpen && !drawerOpen && recs.pool(TAB_KIND[tab]).size() > 3) {
+                // Only the card under focus holds still; the turn passes to the next one.
+                if (zone == Z_CARDS && turn == cardIndex) turn = (turn + 1) % 3;
+                int size = recs.pool(TAB_KIND[tab]).size();
+                int next = rotation % size;
+                for (int i = 0; i < size && (next == slots[0] || next == slots[1] || next == slots[2]); i++) next = ++rotation % size;
+                slots[turn] = next;
+                rotation++;
+                turn = (turn + 1) % 3;
+                updateCards();
+            }
+            handler.postDelayed(this, ROTATE_MS);
+        }
+    };
+
+    // Card change animation (like the streaming apps): the new photo fades in over the old one while it settles from a
+    // slight zoom. And the synopsis: OK on a card shows it over the photo; OK again opens the app (if the TV has it).
+    private static final long CARD_FADE_MS = 900, SYNOPSIS_FADE_MS = 220;
+    private final Bitmap[] cardShown = new Bitmap[3], cardBefore = new Bitmap[3];
+    private final String[] cardKey = new String[3];
+    private final long[] cardChangedAt = new long[3];
+    private int synopsisIndex = -1;
+    private long synopsisAt;
+    private StaticLayout synopsisLayout;
+    private TextPaint synopsisText, synopsisTitle;
+
+    private boolean cardsFading() {
+        long now = SystemClock.uptimeMillis();
+        for (int i = 0; i < 3; i++) if (cardBefore[i] != null && now - cardChangedAt[i] < CARD_FADE_MS) return true;
+        return synopsisIndex >= 0 && now - synopsisAt < SYNOPSIS_FADE_MS;
+    }
+
+    private void openSynopsis(int i) {
+        Recs.Pick p = i < cards.size() ? cards.get(i) : null;
+        if (p == null) return;
+        if (synopsisText == null) {
+            synopsisText = new TextPaint(Ui.text(Ui.medium, 23 * k, 0xF2FFFFFF));
+            synopsisTitle = new TextPaint(Ui.text(Ui.semibold, 30 * k, 0xFFFFFFFF));
+        }
+        RectF r = cardRects[i];
+        float pad = 28 * k;
+        int width = Math.max(1, Math.round(r.width() - 2 * pad));
+        float room = r.height() - 2 * pad - 50 * k;
+        int lines = Math.max(1, (int) (room / (synopsisText.getFontSpacing() * 1.08f)));
+        String text = p.overview == null || p.overview.isEmpty() ? Ui.tr("Sem sinopse em português.", "No synopsis.") : p.overview;
+        synopsisLayout = StaticLayout.Builder.obtain(text, 0, text.length(), synopsisText, width)
+                .setLineSpacing(0, 1.08f).setMaxLines(lines).setEllipsize(TextUtils.TruncateAt.END).build();
+        synopsisIndex = i;
+        synopsisAt = SystemClock.uptimeMillis();
+        heroDirty = true;
+    }
+
+    private boolean closeSynopsis() {
+        if (synopsisIndex < 0) return false;
+        synopsisIndex = -1;
+        synopsisLayout = null;
+        heroDirty = true;
+        return true;
+    }
+
+    /** The cards in view: three in a row from the tab's pool, starting at `rotation`. */
+    private List<Recs.Pick> windowCards() {
+        List<Recs.Pick> pool = recs.pool(TAB_KIND[tab]);
+        if (pool.size() <= 3) return recs.now(TAB_KIND[tab]);
+        List<Recs.Pick> out = new ArrayList<>();
+        for (int i = 0; i < 3; i++) out.add(pool.get(slots[i] % pool.size()));
+        // The next one in line is loaded now, so it arrives with its photo.
+        recs.backdrop(pool.get(rotation % pool.size()));
+        return out;
+    }
+
     /** The three cards of the current tab (Explore, Movies, Shows) and the background taken from the first one. */
     private void updateCards() {
-        List<Recs.Pick> list = recs.now(TAB_KIND[tab]);
+        List<Recs.Pick> list = windowCards();
         if (!samePicks(list, cards)) {
             cards = list;
             cardIndex = Math.min(cardIndex, Math.max(0, list.size() - 1));
@@ -1877,7 +2038,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
                 retarget(false);
             }
         }
-        for (Recs.Pick p : recs.wanted()) recs.backdrop(p);   // all three tabs preloaded: switching tabs is instant
+        for (Recs.Pick p : list) recs.backdrop(p);
         Backdrop b = cards.isEmpty() ? null : recs.backdrop(cards.get(0));
         if (cards.isEmpty() || b != null) showBackdrop(b);
         heroDirty = true;
@@ -1886,6 +2047,11 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
     private void selectTab(int index) {
         if (index == tab) return;
         tab = index;
+        slots[0] = 0;
+        slots[1] = 1;
+        slots[2] = 2;
+        rotation = 3;
+        turn = 0;
         updateCards();
         heroDirty = true;
     }
@@ -1928,10 +2094,25 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         if (night > 0.001f) drawImage(c, b.nightImage, alpha * night);
     }
 
+    /** Top center: the weather now, in one line (icon, temperature and sky). */
+    private void drawWeatherSummary(Canvas c) {
+        HomeData.Weather wx = data.weather;
+        if (Double.isNaN(wx.temp) || lWx == null) return;
+        lWx.setColor(tone(L_INK, WHITE));
+        String now = HomeData.degrees(wx.temp) + "  " + HomeData.condition(wx.code, wx.isDay);
+        String symbol = Symbols.weather(wx.code, wx.isDay);
+        float size = 36 * k, sw = Symbols.width(getContext(), symbol, size);
+        float width = sw + 14 * k + lWx.measureText(now);
+        float x = 960 * k - width / 2, base = 102 * k + Ui.halfCap(lWx);   // level with the round buttons on the right
+        Symbols.draw(getContext(), c, symbol, x + sw / 2, base - Ui.halfCap(lWx), size, lWx.getColor());
+        c.drawText(now, x + sw + 14 * k, base, lWx);
+    }
+
     private void drawLightTop(Canvas c) {
         applyTone();
         String hello = Ui.tr("Para você", "For You");
         c.drawText(hello, MARGIN * k - Ui.leftBearing(lTitle, hello), L_TITLE_BASE * k, lTitle);
+        drawWeatherSummary(c);
         // Text tabs (the selected one in bold, in the main text color); with focus on the tabs, the selected one gets
         // the white pill with a shadow and grows a little (the tvOS focus).
         float focus = Ui.clamp(topFocus[tab].value);
@@ -1990,7 +2171,29 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         c.clipPath(clip);
         Backdrop b = p == null ? null : recs.backdrop(p);
         Bitmap img = b == null ? null : (i == 0 ? b.wide : b.tall);
-        if (img != null) {
+        long now = SystemClock.uptimeMillis();
+        String key = p == null ? null : Recs.key(p);
+        if (img != null && key != null && !key.equals(cardKey[i])) {
+            // A new title on this card: the old photo stays underneath while the new one fades in.
+            cardBefore[i] = cardKey[i] == null ? null : cardShown[i];
+            cardChangedAt[i] = now;
+            cardKey[i] = key;
+            if (synopsisIndex == i) closeSynopsis();
+        }
+        if (img != null) cardShown[i] = img;
+        float t = cardBefore[i] == null ? 1 : Ui.clamp((now - cardChangedAt[i]) / (float) CARD_FADE_MS);
+        if (t >= 1) cardBefore[i] = null;
+        if (img != null && t < 1) {
+            float e = 1 - (1 - t) * (1 - t) * (1 - t);   // ease-out
+            c.drawBitmap(cardBefore[i], null, cell, bitmapPaint);
+            c.save();
+            float z = 1.08f - 0.08f * e;
+            c.scale(z, z, cell.centerX(), cell.centerY());
+            bitmapPaint.setAlpha(Math.round(255 * e));
+            c.drawBitmap(img, null, cell, bitmapPaint);
+            bitmapPaint.setAlpha(255);
+            c.restore();
+        } else if (img != null) {
             c.drawBitmap(img, null, cell, bitmapPaint);
         } else {
             fill.setShader(null);
@@ -2001,6 +2204,21 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
             sheen.setShader(new LinearGradient(cell.left, cell.top, cell.left + cell.width() * 0.5f, cell.bottom,
                     Ui.alpha(0xFFFFFFFF, 0.22f * f), 0x00FFFFFF, Shader.TileMode.CLAMP));
             c.drawRect(cell, sheen);
+        }
+        if (i == synopsisIndex && synopsisLayout != null && p != null) {
+            float a = Ui.clamp((now - synopsisAt) / (float) SYNOPSIS_FADE_MS);
+            fill.setShader(null);
+            fill.setColor(Ui.alpha(0xFF000000, 0.78f * a));
+            c.drawRect(cell, fill);
+            float pad = 28 * k;
+            synopsisTitle.setAlpha(Math.round(255 * a));
+            synopsisText.setAlpha(Math.round(242 * a));
+            c.drawText(TextUtils.ellipsize(p.title, synopsisTitle, cell.width() - 2 * pad, TextUtils.TruncateAt.END).toString(),
+                    cell.left + pad, cell.top + pad + Ui.cap(synopsisTitle), synopsisTitle);
+            c.save();
+            c.translate(cell.left + pad, cell.top + pad + 50 * k);
+            synopsisLayout.draw(c);
+            c.restore();
         }
         c.restore();
         if (f > 0.01f) {

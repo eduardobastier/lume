@@ -39,6 +39,9 @@ number() {
 LAT="$(number latitude 40.7128)"
 LON="$(number longitude -74.0060)"
 ASSIST=false; [ "$(prop disable_assistant false)" = "true" ] && ASSIST=true
+RECENT=false; [ "$(prop recs_recent false)" = "true" ] && RECENT=true
+ALLRECS=false; [ "$(prop recs_all false)" = "true" ] && ALLRECS=true
+PRICES=true; [ "$(prop show_prices true)" = "false" ] && PRICES=false
 
 rm -rf out && mkdir -p out/gen/io/freemytv out/classes
 cat > out/gen/io/freemytv/Config.java <<EOF
@@ -49,6 +52,8 @@ final class Config {
     private Config() {}
 
     static final String TMDB_KEY = "$(prop tmdb_key '')";
+    static final String YOUTUBE_KEY = "$(prop youtube_key '')";
+    static final String RECS_GENRES = "$(prop recs_genres '')";
     static final String TMDB_REGION = "$(prop tmdb_region US)";
     static final String LATITUDE = "$LAT";
     static final String LONGITUDE = "$LON";
@@ -57,6 +62,9 @@ final class Config {
     static final String CURRENCY = "$(prop currency USD)";
     static final String TEMPERATURE = "$(prop temperature auto)";
     static final boolean DISABLE_ASSISTANT = $ASSIST;
+    static final boolean SHOW_PRICES = $PRICES;
+    static final boolean RECS_ALL = $ALLRECS;
+    static final boolean RECS_RECENT = $RECENT;
 }
 EOF
 

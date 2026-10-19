@@ -6,6 +6,7 @@ import android.content.ActivityNotFoundException;
 import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
+import android.content.SharedPreferences;
 import android.content.pm.ActivityInfo;
 import android.content.pm.ApplicationInfo;
 import android.content.pm.PackageManager;
@@ -63,6 +64,7 @@ final class HomeApps {
     static final class Item {
         int kind;
         String key, label, pkg, inputId, number;
+        String uri;         // apps: open this link inside the app (a YouTube video) instead of the app's start screen
         String symbol;      // icon for the shortcuts and special cards
         Bitmap tile;        // 16:9 card (apps and specials)
         Bitmap logo;        // colored logo with no background (shelf); null = use the card
@@ -114,22 +116,90 @@ final class HomeApps {
     static List<Item> shelf(Context c, boolean extract) {
         List<Item> items = new ArrayList<>();
         PackageManager pm = c.getPackageManager();
-        for (String[] d : SHELF) {
-            if (items.size() >= MAX_SHELF) break;
-            if (launchIntent(pm, d[2]) == null) continue;
+        for (String pkg : shelfPackages(c)) {
+            String[] d = known(pkg);
             Item it = new Item();
             it.kind = APP;
-            it.key = d[0];
-            it.label = d[1];
-            it.pkg = d[2];
-            it.tile = appTile(c, d[0], d[2], 0xFF000000 | Integer.parseInt(d[3], 16));
-            it.logo = shelfLogo(c, d[0], d[2], d[4], extract);
+            it.pkg = pkg;
+            if (d != null) {
+                it.key = d[0];
+                it.label = d[1];
+                it.tile = appTile(c, d[0], pkg, 0xFF000000 | Integer.parseInt(d[3], 16));
+                it.logo = shelfLogo(c, d[0], pkg, d[4], extract);
+                it.logoDark = ownLogoCached(c, d[0] + "-dark");
+                it.logoScale = Float.parseFloat(d[5]);
+            } else {
+                // An app you added yourself: its logo comes from its TV art, like the others.
+                it.key = pkg;
+                it.label = label(pm, pkg);
+                it.tile = appTile(c, null, pkg, 0);
+                it.logo = shelfLogo(c, pkg, pkg, "", extract);
+            }
             if (it.logo != null) it.logoInk = ink(it.logo);
-            it.logoDark = ownLogoCached(c, d[0] + "-dark");
-            it.logoScale = Float.parseFloat(d[5]);
             items.add(it);
         }
         return items;
+    }
+
+    // MARK: - Your dock: the SHELF defaults minus the ones you removed, then the ones you added (hold OK to change)
+
+    private static SharedPreferences dock(Context c) {
+        return c.getSharedPreferences("dock", Context.MODE_PRIVATE);
+    }
+
+    private static List<String> prefList(Context c, String name) {
+        List<String> out = new ArrayList<>();
+        for (String p : dock(c).getString(name, "").split(",")) if (!p.isEmpty()) out.add(p);
+        return out;
+    }
+
+    private static String[] known(String pkg) {
+        for (String[] d : SHELF) if (d[2].equals(pkg)) return d;
+        return null;
+    }
+
+    /** The packages on the home shelf, in order: installed ones only, up to MAX_SHELF. */
+    static synchronized List<String> shelfPackages(Context c) {
+        PackageManager pm = c.getPackageManager();
+        List<String> removed = prefList(c, "removed"), out = new ArrayList<>();
+        List<String> wanted = new ArrayList<>();
+        for (String[] d : SHELF) if (!removed.contains(d[2])) wanted.add(d[2]);
+        for (String p : prefList(c, "added")) if (!wanted.contains(p)) wanted.add(p);
+        for (String p : wanted) {
+            if (out.size() >= MAX_SHELF) break;
+            if (launchIntent(pm, p) != null) out.add(p);
+        }
+        return out;
+    }
+
+    /** Adds an app to the end of the shelf. False when the shelf is already full. */
+    static synchronized boolean addToDock(Context c, String pkg) {
+        if (shelfPackages(c).contains(pkg)) return true;
+        if (shelfPackages(c).size() >= MAX_SHELF) return false;
+        List<String> removed = prefList(c, "removed"), added = prefList(c, "added");
+        removed.remove(pkg);
+        if (known(pkg) == null && !added.contains(pkg)) added.add(pkg);
+        dock(c).edit().putString("removed", String.join(",", removed)).putString("added", String.join(",", added)).commit();
+        return true;
+    }
+
+    static synchronized void removeFromDock(Context c, String pkg) {
+        List<String> removed = prefList(c, "removed"), added = prefList(c, "added");
+        added.remove(pkg);
+        if (known(pkg) != null && !removed.contains(pkg)) removed.add(pkg);
+        dock(c).edit().putString("removed", String.join(",", removed)).putString("added", String.join(",", added)).commit();
+    }
+
+    static boolean dockFull(Context c) {
+        return shelfPackages(c).size() >= MAX_SHELF;
+    }
+
+    private static String label(PackageManager pm, String pkg) {
+        try {
+            return String.valueOf(pm.getApplicationLabel(pm.getApplicationInfo(pkg, 0)));
+        } catch (PackageManager.NameNotFoundException e) {
+            return pkg;
+        }
     }
 
     /** Live TV, the HDMI inputs with a device sending a signal, and All Apps. */
@@ -244,7 +314,7 @@ final class HomeApps {
     static List<Item> others(Context c) {
         PackageManager pm = c.getPackageManager();
         Set<String> skip = new HashSet<>();
-        for (String[] d : SHELF) skip.add(d[2]);
+        skip.addAll(shelfPackages(c));
         skip.addAll(java.util.Arrays.asList(LIVE_TV_APPS));
         skip.add(c.getPackageName());
         skip.addAll(HIDDEN);
@@ -278,6 +348,10 @@ final class HomeApps {
         Intent intent;
         switch (it.kind) {
             case APP:
+                if (it.uri != null) {
+                    intent = new Intent(Intent.ACTION_VIEW, android.net.Uri.parse(it.uri)).setPackage(it.pkg);
+                    break;
+                }
                 intent = launchIntent(a.getPackageManager(), it.pkg);
                 if (intent != null) intent.addFlags(Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED);
                 break;

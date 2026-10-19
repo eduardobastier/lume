@@ -45,6 +45,7 @@ final class HomeData {
 
     /** BTC, ETH and SOL; in Brazilian reais also the dollar (USDT/BRL), which Binance doesn't list for most currencies. */
     static int coinCount() {
+        if (!Config.SHOW_PRICES) return 0;
         return CURRENCY.equals("BRL") ? COINS.length : 3;
     }
 
@@ -93,8 +94,8 @@ final class HomeData {
         cache = c.getSharedPreferences("homedata", Context.MODE_PRIVATE);
         try {
             String p = cache.getString("prices", null);
-            if (p != null) parsePrices(p);
-            pricesAt = cache.getLong("pricesAt", 0);
+            if (p != null && Config.SHOW_PRICES) parsePrices(p);
+            if (Config.SHOW_PRICES) pricesAt = cache.getLong("pricesAt", 0);
             String w = cache.getString("weather", null);
             if (w != null) weather = parseWeather(w);
             weatherAt = cache.getLong("weatherAt", 0);
@@ -108,7 +109,7 @@ final class HomeData {
     void refreshIfStale() {
         long now = System.currentTimeMillis();
         // A negative age (the TV's clock went back) counts as stale: otherwise the data would freeze.
-        if (!fetchingPrices && (now - pricesAt > PRICES_EVERY || now < pricesAt)) {
+        if (Config.SHOW_PRICES && !fetchingPrices && (now - pricesAt > PRICES_EVERY || now < pricesAt)) {
             fetchingPrices = true;
             io.execute(() -> {
                 try {

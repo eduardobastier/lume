@@ -142,6 +142,8 @@ final class HomeMode {
                 if (out.contains("disabled-user")) disabled.add(pkg);
                 else AppLog.w("could not turn off " + pkg + ": " + out.trim());
             }
+            // Turning off a home screen changes the HOME result set, and Android 12 then drops our preferred home.
+            adb.shell("cmd package set-home-activity " + HOME_ACTIVITY);
             Watchdog.clear(c);
             s = state(c);
             s.put("mode", FREE).put("since", System.currentTimeMillis()).put("homeReverted", false)
@@ -277,9 +279,11 @@ final class HomeMode {
                         fixed.add(pkg);
                     }
                 }
-                if (!reverted && !adb.shell("cmd role get-role-holders --user 0 android.app.role.HOME").contains(PKG)) {
+                String holders = reverted ? "" : adb.shell("cmd role get-role-holders --user 0 android.app.role.HOME");
+                if (!reverted && !holders.contains(PKG)) {
                     adb.shell("cmd package set-home-activity " + HOME_ACTIVITY);
-                    fixed.add(Ui.tr("o Início", "the home screen"));
+                    // Android 12 can't say who holds HOME: set it again quietly instead of reporting a fix.
+                    if (!holders.contains("Unknown command")) fixed.add(Ui.tr("o Início", "the home screen"));
                 }
                 if (!adb.shell("settings get secure screensaver_components").contains(DREAM)) {
                     adb.shell("settings put secure screensaver_components " + DREAM);
@@ -317,6 +321,13 @@ final class HomeMode {
     /** The home screen in use now ("package/activity"): the HOME role holder, among the TV's home screens. */
     private static String currentHome(Adb adb) throws IOException {
         String holder = adb.shell("cmd role get-role-holders --user 0 android.app.role.HOME").trim();
+        // Android 12 has no get-role-holders: ask which home screen the HOME intent opens instead.
+        if (!holder.matches("[\\w.]+")) {
+            String[] lines = adb.shell("cmd package resolve-activity --brief --user 0 -a android.intent.action.MAIN"
+                    + " -c android.intent.category.HOME").trim().split("\n");
+            holder = packageOf(lines[lines.length - 1].trim());
+            if (holder == null) return null;
+        }
         if (holder.isEmpty() || holder.contains(PKG)) return null;
         String list = adb.shell("cmd package query-activities --brief --user 0 -a android.intent.action.MAIN"
                 + " -c android.intent.category.HOME");
