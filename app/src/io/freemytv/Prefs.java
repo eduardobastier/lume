@@ -63,6 +63,23 @@ final class Prefs {
         ui(c).edit().putString("tmdb_key", key == null ? "" : key.trim()).apply();
     }
 
+    /** Navigation sounds (the soft clicks on the home screen and in Settings). */
+    static boolean sounds(Context c) {
+        return ui(c).getBoolean("sounds", true);
+    }
+
+    /**
+     * What "Live TV" opens: "auto" (the HDMI input with a device on, like a cable TV box; else the TV's tuner),
+     * "tuner", "input:<TV input id>" or "app:<package>".
+     */
+    static String liveTv(Context c) {
+        return ui(c).getString("live_tv", "auto");
+    }
+
+    static void setLiveTv(Context c, String value) {
+        ui(c).edit().putString("live_tv", value).apply();
+    }
+
     static boolean recent(Context c) {
         return ui(c).getBoolean("recs_recent", Config.RECS_RECENT);
     }

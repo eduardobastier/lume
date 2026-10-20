@@ -299,7 +299,7 @@ final class HomeApps {
      * HDMI inputs: only the ones with a device sending a signal (or all of them, with `all`). A name you gave the input
      * in the TV's settings is used as the label.
      */
-    private static List<Item> inputs(Context c, boolean all) {
+    static List<Item> inputs(Context c, boolean all) {
         List<Item> out = new ArrayList<>();
         TvInputManager tim = (TvInputManager) c.getSystemService(Context.TV_INPUT_SERVICE);
         if (tim == null) return out;
@@ -369,6 +369,21 @@ final class HomeApps {
         return items;
     }
 
+    /** Every TV app (the dock's too), by name, for choosing what Live TV opens. Not ours, not the TV's Settings. */
+    static List<Item> allApps(Context c) {
+        PackageManager pm = c.getPackageManager();
+        Intent query = new Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LEANBACK_LAUNCHER);
+        List<Item> items = new ArrayList<>();
+        Set<String> seen = new HashSet<>();
+        for (ResolveInfo ri : pm.queryIntentActivities(query, 0)) {
+            String pkg = ri.activityInfo.packageName;
+            if (pkg.equals(c.getPackageName()) || pkg.equals("com.android.tv.settings") || !seen.add(pkg)) continue;
+            items.add(app(pkg, String.valueOf(ri.loadLabel(pm))));
+        }
+        Collections.sort(items, (a, b) -> a.label.toLowerCase(Locale.ROOT).compareTo(b.label.toLowerCase(Locale.ROOT)));
+        return items;
+    }
+
     private static Item special(Context c, int kind, String key, String label, String symbol) {
         Item it = shortcut(kind, key, label, symbol);
         it.tile = symbolTile(c, key, symbol);
@@ -419,6 +434,23 @@ final class HomeApps {
      */
     static Intent liveTv(Context c) {
         PackageManager pm = c.getPackageManager();
+        String choice = Prefs.liveTv(c);
+        if (choice.startsWith("app:")) {
+            Intent app = launchIntent(pm, choice.substring(4));
+            if (app != null) return app;
+        } else if (choice.startsWith("input:")) {
+            return new Intent(Intent.ACTION_VIEW, TvContract.buildChannelUriForPassthroughInput(choice.substring(6)));
+        } else if (choice.equals("auto")) {
+            // A cable TV box (or any device) sending a signal on an HDMI input comes first.
+            List<Item> on = inputs(c, false);
+            if (!on.isEmpty()) return new Intent(Intent.ACTION_VIEW, TvContract.buildChannelUriForPassthroughInput(on.get(0).inputId));
+        }
+        return tunerTv(c);
+    }
+
+    /** The TV's own tuner (antenna or coaxial cable): its channels, or the brand's live TV app. */
+    private static Intent tunerTv(Context c) {
+        PackageManager pm = c.getPackageManager();
         String tuner = tunerInput(c);
         if (tuner != null) {
             Intent channels = new Intent(Intent.ACTION_VIEW, TvContract.buildChannelsUriForInput(tuner));
@@ -437,6 +469,11 @@ final class HomeApps {
         if (tim == null) return null;
         String fallback = null;
         try {
+            // The TV's real tuner is backed by hardware (".../HW2", whatever type the brand gives it); apps like Play
+            // Movies also register system "tuner" inputs for previews, and opening one of those showed nothing.
+            for (TvInputInfo info : tim.getTvInputList()) {
+                if (!info.isPassthroughInput() && info.getId().contains("/HW")) return info.getId();
+            }
             for (TvInputInfo info : tim.getTvInputList()) {
                 if (info.getType() != TvInputInfo.TYPE_TUNER || info.isPassthroughInput()) continue;
                 if (info.getServiceInfo() != null && info.getServiceInfo().applicationInfo != null

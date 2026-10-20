@@ -19,6 +19,9 @@ import android.view.Choreographer;
 import android.view.KeyEvent;
 import android.view.View;
 
+import java.util.ArrayList;
+import java.util.List;
+
 import org.json.JSONArray;
 import org.json.JSONObject;
 
@@ -54,6 +57,11 @@ public class SettingsActivity extends Activity {
     @Override protected void onNewIntent(Intent intent) {
         super.onNewIntent(intent);
         setIntent(intent);
+    }
+
+    @Override protected void onDestroy() {
+        view.releaseSounds();
+        super.onDestroy();
     }
 
     @Override protected void onPause() {
@@ -172,18 +180,21 @@ public class SettingsActivity extends Activity {
     }
 
     static final class SettingsView extends View implements Choreographer.FrameCallback {
-        private static final int MAIN = 0, HOME_CHOICE = 1, RECS = 2, THEME = 3;
+        private static final int MAIN = 0, HOME_CHOICE = 1, RECS = 2, THEME = 3, MAIN_ROWS = 7;
         /** The popup over the list: none, the theme, the genres (several at once) or what OK on a card opens. */
-        private static final int NO_POPUP = 0, THEME_POPUP = 1, GENRE_POPUP = 2, ACTION_POPUP = 3;
+        private static final int NO_POPUP = 0, THEME_POPUP = 1, GENRE_POPUP = 2, ACTION_POPUP = 3, LIVE_POPUP = 4;
+        /** Live TV choices: [value, name], built when the popup opens (the TV's inputs and installed apps). */
+        private List<String[]> liveChoices = new ArrayList<>();
         private int popup = NO_POPUP, popupFocus;
-        private final Spring[] popupPop = new Spring[16];
+        private final Spring[] popupPop = new Spring[40];
         private static final float LIST_X = 1000, LIST_R = 1824, LIST_TOP = 186, ROW_H = 74, ROW_GAP = 8, CHOICE_H = 104;
         private static final int AMBER = 0xFFFFC266, INK = 0xFF1C1C1E;
 
         private final SettingsActivity activity;
         private final Scene scene = new Scene();
+        private Click click;
         private final Handler handler = new Handler(Looper.getMainLooper());
-        private final Spring[] pop = new Spring[6];
+        private final Spring[] pop = new Spring[8];
         private final RectF tmp = new RectF(), rowRect = new RectF();
         private JSONObject state = new JSONObject(), recs = new JSONObject();
         private boolean hasKey;
@@ -212,6 +223,7 @@ public class SettingsActivity extends Activity {
             activity = a;
             for (int i = 0; i < pop.length; i++) pop[i] = new Spring(0.28f, 0.85f, 0);
             for (int i = 0; i < popupPop.length; i++) popupPop[i] = new Spring(0.28f, 0.85f, 0);
+            click = new Click(a);
             HomeData.Weather wx = HomeData.get(a).weather;
             Shaders.sky(scene.palette, System.currentTimeMillis(), wx.sunrise, wx.sunset);
             scene.setMotion(0.5f, 0.2f);
@@ -291,6 +303,10 @@ public class SettingsActivity extends Activity {
             return light ? (color & 0xFF000000) | 0x1D1D1F : color;
         }
 
+        void releaseSounds() {
+            click.release();
+        }
+
         boolean isLight() {
             return light;
         }
@@ -339,7 +355,7 @@ public class SettingsActivity extends Activity {
         }
 
         private int rowCount() {
-            return screen == MAIN ? 5 : screen == RECS ? 5 : screen == THEME ? 3 : 2;
+            return screen == MAIN ? MAIN_ROWS : screen == RECS ? 5 : screen == THEME ? 3 : 2;
         }
 
         @Override protected void onDraw(Canvas c) {
@@ -375,9 +391,11 @@ public class SettingsActivity extends Activity {
             String busyText = state.optString("busy");
             String mode = freeActive() ? "Free My TV" : Ui.tr("Original", "Original");
             String[] labels = {Ui.tr("Início", "Home Screen"), Ui.tr("Tela de Descanso", "Screensaver"), Ui.tr("Tema", "Theme"),
+                    Ui.tr("TV ao Vivo", "Live TV"), Ui.tr("Sons ao navegar", "Navigation sounds"),
                     Ui.tr("Recomendações", "Recommendations"), Ui.tr("Ajustes da TV", "TV Settings")};
-            String[] values = {working ? "" : mode, Ui.tr("Ver agora", "Preview"), themes()[HomeView.theme(getContext())], "", ""};
-            for (int i = 0; i < 5; i++) {
+            String[] values = {working ? "" : mode, Ui.tr("Ver agora", "Preview"), themes()[HomeView.theme(getContext())],
+                    liveName(), Prefs.sounds(getContext()) ? Ui.tr("Sim", "On") : Ui.tr("Não", "Off"), "", ""};
+            for (int i = 0; i < MAIN_ROWS; i++) {
                 float y = (LIST_TOP + i * (ROW_H + ROW_GAP)) * k;
                 rowRect.set(LIST_X * k, y, LIST_R * k, y + ROW_H * k);
                 float f = drawRowBackground(c, i);
@@ -386,8 +404,8 @@ public class SettingsActivity extends Activity {
                 float base = rowRect.centerY() + Ui.halfCap(rowLabel);
                 c.drawText(labels[i], rowRect.left + 30 * k, base, rowLabel);
                 float right = rowRect.right - 30 * k;
-                if (i >= 3 || i == 2) {
-                    if (i == 2) {
+                if (i >= 5 || i == 2 || i == 3) {
+                    if (i == 2 || i == 3) {
                         rowValue.setColor(blend(fg(0x8CFFFFFF), 0x8C1C1C1E, f));
                         float cw = Symbols.width(getContext(), "chevron_right", 22 * k);
                         c.drawText(values[i], right - cw - 14 * k, base, rowValue);
@@ -409,7 +427,7 @@ public class SettingsActivity extends Activity {
                 }
             }
 
-            float y = (LIST_TOP + 5 * (ROW_H + ROW_GAP) + 46) * k;
+            float y = (LIST_TOP + MAIN_ROWS * (ROW_H + ROW_GAP) + 46) * k;
             String error = state.optString("error");
             if (working && (busyText.contains("Permitir") || busyText.contains("Allow"))) {
                 c.drawText(Ui.tr("Na TV: marque “Sempre permitir” e aperte OK.", "On the TV: tick “Always allow” and press OK."),
@@ -419,8 +437,8 @@ public class SettingsActivity extends Activity {
                 c.drawText(TextUtils.ellipsize(error, new TextPaint(warn), 760 * k, TextUtils.TruncateAt.END).toString(), LIST_X * k + 30 * k, y, warn);
                 y += 46 * k;
             }
-            y = drawComparison(c, y);
-            y = drawRecs(c, y + 26 * k);
+            // Like Apple TV's Settings: the list, and below it only the recommendations status and the notices.
+            y = drawRecs(c, y);
             drawNotices(c, y + 40 * k);
         }
 
@@ -461,27 +479,6 @@ public class SettingsActivity extends Activity {
                 rowRect.set(tmp);
             }
             return f;
-        }
-
-        private float drawComparison(Canvas c, float y) {
-            float x = LIST_X * k + 30 * k, colA = LIST_R * k - 220 * k, colB = LIST_R * k - 30 * k;
-            c.drawText(Ui.tr("COMPARAÇÃO", "COMPARISON"), x, y, header);
-            cellValue.setColor(fg(0x73FFFFFF));
-            c.drawText("Original", colA, y, cellValue);
-            c.drawText("Free My TV", colB, y, cellValue);
-            cellValue.setColor(fg(0xD9FFFFFF));
-            JSONObject metrics = state.optJSONObject("metrics");
-            JSONObject a = metrics == null ? null : metrics.optJSONObject(HomeMode.ORIGINAL);
-            JSONObject b = metrics == null ? null : metrics.optJSONObject(HomeMode.FREE);
-            String[][] rows = {{Ui.tr("Botão Início", "Home button"), "homeMs"}, {Ui.tr("Memória livre", "Free memory"), "memAvailableMB"},
-                    {Ui.tr("Memória do Início", "Home screen memory"), "homePssMB"}};
-            for (int i = 0; i < rows.length; i++) {
-                float base = y + (46 + 40 * i) * k;
-                c.drawText(rows[i][0], x, base, cellLabel);
-                c.drawText(metric(a, rows[i][1]), colA, base, cellValue);
-                c.drawText(metric(b, rows[i][1]), colB, base, cellValue);
-            }
-            return y + (46 + 40 * rows.length) * k;
         }
 
         private void drawNotices(Canvas c, float y) {
@@ -570,7 +567,34 @@ public class SettingsActivity extends Activity {
             }
         }
 
+        /** "Live TV" choices: automatic, the TV's tuner, each HDMI input, then the installed apps. */
+        private List<String[]> liveChoices() {
+            Context c = getContext();
+            List<String[]> out = new ArrayList<>();
+            out.add(new String[] {"auto", Ui.tr("Automático (TV a cabo)", "Automatic (cable box)")});
+            out.add(new String[] {"tuner", Ui.tr("Antena / cabo coaxial", "Antenna / coax cable")});
+            for (HomeApps.Item in : HomeApps.inputs(c, true)) out.add(new String[] {"input:" + in.inputId, in.label});
+            for (HomeApps.Item app : HomeApps.allApps(c)) out.add(new String[] {"app:" + app.pkg, app.label});
+            return out;
+        }
+
+        private String liveName() {
+            String v = Prefs.liveTv(getContext());
+            if (v.equals("auto")) return Ui.tr("Automático", "Automatic");
+            if (v.equals("tuner")) return Ui.tr("Antena / cabo", "Antenna / cable");
+            for (String[] ch : liveChoices) if (ch[0].equals(v)) return ch[1];
+            if (v.startsWith("app:")) {
+                try {
+                    android.content.pm.PackageManager pm = getContext().getPackageManager();
+                    return String.valueOf(pm.getApplicationLabel(pm.getApplicationInfo(v.substring(4), 0)));
+                } catch (android.content.pm.PackageManager.NameNotFoundException ignored) {
+                }
+            }
+            return v.startsWith("input:") ? "HDMI" : v;
+        }
+
         private String popupTitle() {
+            if (popup == LIVE_POPUP) return Ui.tr("TV ao Vivo abre", "Live TV opens");
             return popup == THEME_POPUP ? Ui.tr("Tema", "Theme") : popup == GENRE_POPUP ? Ui.tr("Categorias", "Genres")
                     : Ui.tr("Ao apertar OK no card", "OK on a card");
         }
@@ -578,6 +602,11 @@ public class SettingsActivity extends Activity {
         private String[] popupOptions() {
             if (popup == THEME_POPUP) return themes();
             if (popup == ACTION_POPUP) return actions();
+            if (popup == LIVE_POPUP) {
+                String[] names = new String[liveChoices.size()];
+                for (int i = 0; i < names.length; i++) names[i] = liveChoices.get(i)[1];
+                return names;
+            }
             String[] out = new String[Prefs.GENRES.length];
             for (int i = 0; i < out.length; i++) out[i] = Ui.en ? Prefs.GENRES[i][2] : Prefs.GENRES[i][1];
             return out;
@@ -586,15 +615,17 @@ public class SettingsActivity extends Activity {
         private boolean popupChecked(int i) {
             if (popup == THEME_POPUP) return HomeView.theme(getContext()) == i;
             if (popup == ACTION_POPUP) return actionIndex() == i;
+            if (popup == LIVE_POPUP) return liveChoices.get(i)[0].equals(Prefs.liveTv(getContext()));
             return Prefs.genres(getContext()).contains(Prefs.GENRES[i][0]);
         }
 
         /** A panel in the middle of the screen over a darkened list; the focused option in white. */
         private void drawPopup(Canvas c, float dt) {
             String[] options = popupOptions();
-            boolean grid = popup == GENRE_POPUP;   // the genres in two columns
+            boolean grid = popup == GENRE_POPUP || popup == LIVE_POPUP;   // long lists in two columns
             int cols = grid ? 2 : 1, rows = (options.length + cols - 1) / cols;
-            float rowH = 70, gap = 8, colW = grid ? 400 : 640, pad = 36, head = 96, foot = grid ? 56 : 24;
+            float rowH = rows > 9 ? 58 : 70, gap = 8, colW = grid ? (popup == LIVE_POPUP ? 470 : 400) : 640, pad = 36, head = 96,
+                    foot = popup == GENRE_POPUP ? 56 : 24;
             float pw = cols * colW + (cols - 1) * 16 + 2 * pad, ph = head + rows * (rowH + gap) + foot;
             float left = (1920 - pw) / 2 * k, top = (1080 - ph) / 2 * k;
             Paint dim = new Paint();
@@ -626,7 +657,7 @@ public class SettingsActivity extends Activity {
                     Symbols.draw(getContext(), c, "check", rowRect.right - 26 * k - cw / 2, rowRect.centerY(), 24 * k, blend(fg(0xFFFFFFFF), INK, f));
                 }
             }
-            if (grid) {
+            if (popup == GENRE_POPUP) {
                 Paint hint = Ui.text(Ui.regular, 22 * k, fg(0x8CFFFFFF));
                 c.drawText(Ui.tr("OK marca ou desmarca · Voltar fecha", "OK ticks or unticks · Back closes"),
                         left + pad * k + 10 * k, top + (ph - 22) * k, hint);
@@ -636,6 +667,9 @@ public class SettingsActivity extends Activity {
         private void openPopup(int kind) {
             popup = kind;
             popupFocus = kind == THEME_POPUP ? HomeView.theme(getContext()) : kind == ACTION_POPUP ? actionIndex() : 0;
+            if (kind == LIVE_POPUP) {
+                for (int i = 0; i < liveChoices.size(); i++) if (popupChecked(i)) popupFocus = i;
+            }
             for (Spring s : popupPop) s.snap(0);
         }
 
@@ -669,14 +703,6 @@ public class SettingsActivity extends Activity {
                     | (Math.round(ag + (bg - ag) * f) << 8) | Math.round(ab + (bb - ab) * f);
         }
 
-        private static String metric(JSONObject m, String key) {
-            if (m == null || !m.has(key)) return "—";
-            long v = m.optLong(key);
-            if (key.equals("homeMs")) return v + " ms";
-            if (key.equals("memAvailableMB") && v >= 1024) return String.format(Ui.en ? java.util.Locale.US : Ui.PT, "%.2f GB", v / 1024.0);
-            return v + " MB";
-        }
-
         private static String ago(long at) {
             long minutes = Math.max(0, (System.currentTimeMillis() - at) / 60_000);
             if (minutes < 1) return Ui.tr("agora", "now");
@@ -698,11 +724,17 @@ public class SettingsActivity extends Activity {
             if (popup != NO_POPUP) return popupKey(e, down);
             switch (e.getKeyCode()) {
                 case KeyEvent.KEYCODE_DPAD_UP:
-                    if (down && focus > 0) focus--;
+                    if (down && focus > 0) {
+                        focus--;
+                        click.move();
+                    }
                     invalidate();
                     return true;
                 case KeyEvent.KEYCODE_DPAD_DOWN:
-                    if (down && focus < rowCount() - 1) focus++;
+                    if (down && focus < rowCount() - 1) {
+                        focus++;
+                        click.move();
+                    }
                     invalidate();
                     return true;
                 case KeyEvent.KEYCODE_DPAD_LEFT:
@@ -714,7 +746,10 @@ public class SettingsActivity extends Activity {
                     if (down) {
                         if (e.getRepeatCount() == 0) okDown = true;
                     } else {
-                        if (okDown && !e.isCanceled()) activate();
+                        if (okDown && !e.isCanceled()) {
+                            click.open();
+                            activate();
+                        }
                         okDown = false;
                     }
                     return true;
@@ -724,7 +759,7 @@ public class SettingsActivity extends Activity {
                         if (e.getRepeatCount() == 0) backDown = true;
                     } else {
                         if (backDown && !e.isCanceled()) {
-                            focus = screen == RECS ? 3 : screen == THEME ? 2 : 0;
+                            focus = screen == RECS ? 5 : screen == THEME ? 2 : 0;
                             screen = MAIN;
                         }
                         backDown = false;
@@ -737,13 +772,19 @@ public class SettingsActivity extends Activity {
         }
 
         private boolean popupKey(KeyEvent e, boolean down) {
-            int n = popupOptions().length, cols = popup == GENRE_POPUP ? 2 : 1;
+            int n = popupOptions().length, cols = popup == GENRE_POPUP || popup == LIVE_POPUP ? 2 : 1;
             switch (e.getKeyCode()) {
                 case KeyEvent.KEYCODE_DPAD_UP:
-                    if (down && popupFocus - cols >= 0) popupFocus -= cols;
+                    if (down && popupFocus - cols >= 0) {
+                        popupFocus -= cols;
+                        click.move();
+                    }
                     break;
                 case KeyEvent.KEYCODE_DPAD_DOWN:
-                    if (down && popupFocus + cols < n) popupFocus += cols;
+                    if (down && popupFocus + cols < n) {
+                        popupFocus += cols;
+                        click.move();
+                    }
                     break;
                 case KeyEvent.KEYCODE_DPAD_LEFT:
                     if (down && cols > 1 && popupFocus % cols > 0) popupFocus--;
@@ -758,12 +799,16 @@ public class SettingsActivity extends Activity {
                         if (e.getRepeatCount() == 0) okDown = true;
                     } else if (okDown && !e.isCanceled()) {
                         okDown = false;
+                        click.open();
                         Context c = getContext();
                         if (popup == THEME_POPUP) {
                             HomeView.setTheme(c, popupFocus);
                             popup = NO_POPUP;
                         } else if (popup == ACTION_POPUP) {
                             Prefs.setCardAction(c, ACTION_KEYS[popupFocus]);
+                            popup = NO_POPUP;
+                        } else if (popup == LIVE_POPUP) {
+                            Prefs.setLiveTv(c, liveChoices.get(popupFocus)[0]);
                             popup = NO_POPUP;
                         } else {
                             Prefs.toggleGenre(c, Prefs.GENRES[popupFocus][0]);
@@ -826,6 +871,11 @@ public class SettingsActivity extends Activity {
                 screen = THEME;
                 focus = HomeView.theme(c);
             } else if (focus == 3) {
+                liveChoices = liveChoices();
+                openPopup(LIVE_POPUP);
+            } else if (focus == 4) {
+                Prefs.set(c, "sounds", !Prefs.sounds(c));
+            } else if (focus == 5) {
                 screen = RECS;
                 focus = 0;
             } else {
