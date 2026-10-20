@@ -17,6 +17,9 @@ public class Screensaver extends DreamService {
         setInteractive(false);
         setFullscreen(true);
         setScreenBright(true);
+        // This runs in the main process: start from what the home screen (:home) saved last.
+        Recs.forget();
+        HomeData.forget();
         view = new DreamView(this);
         setContentView(view);
     }

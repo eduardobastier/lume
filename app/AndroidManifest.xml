@@ -94,7 +94,6 @@
 
         <service
             android:name=".Screensaver"
-            android:process=":home"
             android:exported="true"
             android:label="Free My TV"
             android:permission="android.permission.BIND_DREAM_SERVICE">

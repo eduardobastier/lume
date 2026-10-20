@@ -58,7 +58,7 @@ final class Recs {
     private static final String IMAGES = "https://image.tmdb.org/t/p/original";
     private static final long LIST_EVERY = 6 * 3600_000L;
     /** Bump when what is saved for each title changes (the saved list is discarded and fetched again). */
-    private static final int CACHE_VERSION = 9;
+    private static final int CACHE_VERSION = 10;
     /** Anime and cartoons never show up (TMDB's Animation genre, the same id for movies and shows). */
     private static final String NO_GENRES = "16";
     private static final int MANHA = 0, TARDE = 1, NOITE = 2;
@@ -94,6 +94,11 @@ final class Recs {
 
     private static Recs instance;
 
+    /** The screensaver (main process) starts from the list the home screen (:home) saved last. */
+    static synchronized void forget() {
+        instance = null;
+    }
+
     static synchronized Recs get(Context c) {
         if (instance == null) instance = new Recs(c.getApplicationContext());
         return instance;
@@ -118,7 +123,8 @@ final class Recs {
     private Recs(Context c) {
         context = c;
         app = c;
-        cache = c.getSharedPreferences("recs", Context.MODE_PRIVATE);
+        //noinspection deprecation
+        cache = c.getSharedPreferences("recs", Context.MODE_MULTI_PROCESS);   // the screensaver reads it from another process
         if (cache.getInt("version", 0) != CACHE_VERSION) cache.edit().clear().putInt("version", CACHE_VERSION).apply();
         try {
             String saved = cache.getString("picks", null);
@@ -380,12 +386,12 @@ final class Recs {
      * featured one first), never two from the same franchise.
      */
     List<Pick> showcase() {
+        // The same titles as the home screen's cards, in the same order (Explore first, then Movies and Shows).
         List<Pick> out = new ArrayList<>();
         if (!hasKey(context)) return out;
         java.util.Set<String> seen = new java.util.HashSet<>();
-        for (Pick p : wanted()) if (hasImage(p) && seen.add(franchise(p.title))) out.add(p);
-        for (Pick p : picks) {
-            if (p.detailed && usable(p) && hasImage(p) && seen.add(franchise(p.title))) out.add(p);
+        for (String kind : new String[] {null, "movie", "tv"}) {
+            for (Pick p : pool(kind)) if (hasImage(p) && seen.add(franchise(p.title))) out.add(p);
         }
         return out;
     }
@@ -404,7 +410,8 @@ final class Recs {
         long sinceFail = System.currentTimeMillis() - failedAt;
         if (failedAt != 0 && sinceFail >= 0 && sinceFail < 10 * 60_000L) return;
         List<Pick> todo = new ArrayList<>();
-        for (Pick p : picks) if (!p.detailed || (usable(p) && !hasImage(p))) todo.add(p);
+        for (Pick p : pool(null)) if (!hasImage(p)) todo.add(p);
+        for (Pick p : picks) if (!p.detailed || (usable(p) && !hasImage(p) && !todo.contains(p))) todo.add(p);
         if (todo.isEmpty()) return;
         fetching = true;
         io.execute(() -> {
@@ -635,6 +642,9 @@ final class Recs {
         if (backdrop.isEmpty() || "null".equals(backdrop)) return;
         JSONArray gids = o.optJSONArray("genre_ids");
         for (int i = 0; gids != null && !animation() && i < gids.length(); i++) if (String.valueOf(gids.optInt(i)).equals(NO_GENRES)) return;
+        // Horror only when chosen: "Suspense" takes mystery too, and many horror films are also mysteries.
+        boolean horror = Prefs.genres(app).contains("horror");
+        for (int i = 0; gids != null && !horror && i < gids.length(); i++) if (gids.optInt(i) == 27) return;
         if (Prefs.recent(app)) {
             String date = o.optString(kind.equals("movie") ? "release_date" : "first_air_date", "");
             if (date.length() < 10 || date.compareTo(day(kind.equals("movie") ? -MOVIE_DAYS : -SHOW_DAYS)) < 0) return;

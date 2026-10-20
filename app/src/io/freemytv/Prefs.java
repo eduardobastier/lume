@@ -33,7 +33,10 @@ final class Prefs {
             "com.liskovsoft.smarttubetv"};
 
     private static SharedPreferences ui(Context c) {
-        return c.getSharedPreferences("home-ui", Context.MODE_PRIVATE);
+        // The screensaver runs in the main process (on Android 12 its window must live with the service), the settings
+        // in :home: reread the file when the other process changed it.
+        //noinspection deprecation
+        return c.getSharedPreferences("home-ui", Context.MODE_MULTI_PROCESS);
     }
 
     static List<String> genres(Context c) {

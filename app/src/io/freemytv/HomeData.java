@@ -82,6 +82,10 @@ final class HomeData {
 
     private static HomeData instance;
 
+    static synchronized void forget() {
+        instance = null;
+    }
+
     static synchronized HomeData get(Context c) {
         if (instance == null) instance = new HomeData(c.getApplicationContext());
         return instance;
@@ -101,7 +105,8 @@ final class HomeData {
 
     private HomeData(Context c) {
         context = c;
-        cache = c.getSharedPreferences("homedata", Context.MODE_PRIVATE);
+        //noinspection deprecation
+        cache = c.getSharedPreferences("homedata", Context.MODE_MULTI_PROCESS);
         if (cache.contains("lat")) {
             lat = cache.getString("lat", lat);
             lon = cache.getString("lon", lon);
