@@ -178,7 +178,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
     private Spring[] gridFocus = new Spring[0];
     private String[] gridLabels;
     private final Spring sheet = new Spring(0.38f, 0.9f, 0);
-    private final Spring scroll = new Spring(0.34f, 1f, 0);
+    private final Spring scroll = new Spring(0.3f, 1f, 0);
     private final RectF focusedCell = new RectF();
     private boolean sheetOpen;
     private int gridIndex;
@@ -304,7 +304,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
             topRects[i] = new RectF();
         }
         for (int i = 0; i < 3; i++) {
-            cardFocus[i] = new Spring(0.32f, 0.78f, 0);
+            cardFocus[i] = new Spring(0.28f, 0.85f, 0);
             cardRects[i] = new RectF();
         }
         makeLightButtons();
@@ -850,7 +850,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         } else if (bgFadeAt == 0 && bgTo == null) {
             neutralGlass();
         }
-        heroDirty = statusDirty = tilesDirty = drawerDirty = true;
+        heroDirty = statusDirty = tilesDirty = drawerDirty = gridDirty = true;
         sky.invalidate();
         platter.invalidate();
     }
@@ -1032,7 +1032,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
             tileFocus = new Spring[list.size()];
             tileRects = new RectF[list.size()];
             for (int i = 0; i < tileFocus.length; i++) {
-                tileFocus[i] = new Spring(0.34f, 0.74f, 0);
+                tileFocus[i] = new Spring(0.28f, 0.85f, 0);   // the same snap as Settings: no wobble
                 tileRects[i] = new RectF();
             }
             shelfIndex = Math.min(shelfIndex, Math.max(0, list.size() - 1));
@@ -1500,7 +1500,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
     private void setOthers(List<HomeApps.Item> list) {
         others = list;
         gridFocus = new Spring[list.size()];
-        for (int i = 0; i < gridFocus.length; i++) gridFocus[i] = new Spring(0.3f, 0.82f, 0);
+        for (int i = 0; i < gridFocus.length; i++) gridFocus[i] = new Spring(0.28f, 0.85f, 0);
         gridLabels = null;
         gridIndex = Math.min(gridIndex, Math.max(0, list.size() - 1));
         retargetGrid(true);
@@ -1538,8 +1538,12 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         if (snap) scroll.snap(scroll.target);
     }
 
+    private final RectF gridBase = new RectF();
+
     private void drawSheet(Canvas c) {
-        c.drawColor(0xA8000000);
+        // Follows the theme like the rest: frosted light by day, darkened at night.
+        c.drawColor(tone(0xE6F2F2F7, 0xA8000000));
+        sheetTitle.setColor(tone(L_INK, WHITE));
         float shift = scroll.value * GRID_ROW * k;
         c.drawText(Ui.tr("Todos os Apps", "All Apps"), w / 2f, 124 * k - shift, sheetTitle);
         int n = others.size();
@@ -1557,11 +1561,12 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
             float y = gridTop + r * GRID_ROW * k - shift;
             if (y > h || y + GRID_ROW * k < 0) continue;
             float x = left + col * (GRID_W + GRID_GAP) * k;
-            RectF base = new RectF(x, y, x + GRID_W * k, y + GRID_H * k);
+            RectF base = gridBase;
+            base.set(x, y, x + GRID_W * k, y + GRID_H * k);
             float f = gridFocus[i].value;
             drawCard(c, others.get(i).tile, base, GRID_RADIUS * k, f, 0.08f);
             if (sheetOpen && i == gridIndex) focusedCell.set(cell);
-            gridLabel.setColor(blend(0x99FFFFFF, 0xFFFFFFFF, Ui.clamp(f)));
+            gridLabel.setColor(blend(tone(0x991D1D1F, 0x99FFFFFF), tone(L_INK, 0xFFFFFFFF), Ui.clamp(f)));
             c.drawText(gridLabels[i], base.centerX(), base.bottom + (40 + 6 * f) * k, gridLabel);
         }
     }
