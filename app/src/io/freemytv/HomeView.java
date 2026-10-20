@@ -139,6 +139,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         TILE_STYLE.put("appletv", new int[] {0xFF1C1C1E, 0xFF000000, 0});
     }
     private static final int[] DARK_TILE = {0xFF212121, 0xFF0F0F0F, 0};
+    private static final int[] LIGHT_TILE = {0xFFFFFFFF, 0xFFE6E6EA, 2};
     private final android.graphics.PorterDuffColorFilter whiteLogo =
             new android.graphics.PorterDuffColorFilter(0xFFFFFFFF, android.graphics.PorterDuff.Mode.SRC_IN);
     private final RectF platterRect = new RectF();
@@ -763,8 +764,20 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
     // MARK: - Night look
 
     /** Day or night right now (from the sun at your location); `animate`: with the transition. */
+    /** Look: automatic (light by day, dark from sunset), always light or always dark (Home Settings → Theme). */
+    static final int THEME_AUTO = 0, THEME_LIGHT = 1, THEME_DARK = 2;
+
+    static int theme(Context c) {
+        return c.getSharedPreferences("home-ui", Context.MODE_PRIVATE).getInt("theme", THEME_AUTO);
+    }
+
+    static void setTheme(Context c, int theme) {
+        c.getSharedPreferences("home-ui", Context.MODE_PRIVATE).edit().putInt("theme", theme).apply();
+    }
+
     private void checkNight(boolean animate) {
-        boolean want = data.isNight(System.currentTimeMillis());
+        int theme = theme(getContext());
+        boolean want = theme == THEME_AUTO ? data.isNight(System.currentTimeMillis()) : theme == THEME_DARK;
         if (want == nightTarget) return;
         nightTarget = want;
         if (animate && running) {
@@ -1111,8 +1124,9 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         // The white tile needs the dark version of the logo (assets/logos/<key>-dark.png); without it, a logo lifted
         // from the TV art has white letters, so it goes on a dark tile instead.
         if (style != null && style[2] == 2 && it.logoDark == null) style = DARK_TILE;
-        // Your look: every app on the same black gradient tile, its logo in its own colors.
-        if (it.logo != null) style = DARK_TILE;
+        // Your look: every app on the same tile, black gradient at night and light by day, its logo in its own colors
+        // (white letters turn dark on the light tile).
+        if (it.logo != null) style = night < 0.5f && it.logoDark != null ? LIGHT_TILE : DARK_TILE;
         if (it.logo != null && style != null) {
             tileFill.setShader(new LinearGradient(0, cell.top, 0, cell.bottom, style[0], style[1], Shader.TileMode.CLAMP));
             c.drawRoundRect(cell, r, r, tileFill);
@@ -1340,7 +1354,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
     private void drawWeatherCard(Canvas c, RectF r) {
         drawerCard(c, r);
         float x = r.left + 34 * k;
-        c.drawText(Config.CITY.trim().isEmpty() ? Ui.tr("Clima", "Weather") : Config.CITY.trim(), x, r.top + 54 * k, cardTitle);
+        c.drawText(data.city.isEmpty() ? Ui.tr("Clima", "Weather") : data.city, x, r.top + 54 * k, cardTitle);
         HomeData.Weather wx = data.weather;
         if (Double.isNaN(wx.temp)) {
             c.drawText(Ui.tr("Sem dados do clima agora.", "No weather data right now."), x, r.top + 120 * k, cardDim);

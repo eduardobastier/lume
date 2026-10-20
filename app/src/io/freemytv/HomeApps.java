@@ -136,9 +136,41 @@ final class HomeApps {
                 it.logo = shelfLogo(c, pkg, pkg, "", extract);
             }
             if (it.logo != null) it.logoInk = ink(it.logo);
+            if (it.logo != null && it.logoDark == null) it.logoDark = onLight(it.key, it.logo);
             items.add(it);
         }
         return items;
+    }
+
+    /** The logo for a light tile: its white and light gray parts turn dark; its colors stay. Made once per logo. */
+    private static Bitmap onLight(String key, Bitmap logo) {
+        synchronized (LOGOS) {
+            if (LOGOS.containsKey("light:" + key)) return LOGOS.get("light:" + key);
+        }
+        Bitmap out = null;
+        try {
+            Bitmap b = logo.copy(Bitmap.Config.ARGB_8888, true);
+            int w = b.getWidth(), h = b.getHeight();
+            int[] px = new int[w * h];
+            b.getPixels(px, 0, w, 0, 0, w, h);
+            for (int i = 0; i < px.length; i++) {
+                int p = px[i], a = p >>> 24;
+                if (a == 0) continue;
+                int r = (p >> 16) & 255, g = (p >> 8) & 255, bl = p & 255;
+                int max = Math.max(r, Math.max(g, bl)), min = Math.min(r, Math.min(g, bl));
+                float sat = max == 0 ? 0 : (max - min) / (float) max;
+                if (sat < 0.22f && max > 150) px[i] = (a << 24) | 0x1D1D1F;
+            }
+            b.setPixels(px, 0, w, 0, 0, w, h);
+            b.setHasMipMap(true);
+            out = b;
+        } catch (RuntimeException | OutOfMemoryError e) {
+            AppLog.w("light logo: " + e.getMessage());
+        }
+        synchronized (LOGOS) {
+            LOGOS.put("light:" + key, out);
+        }
+        return out;
     }
 
     // MARK: - Your dock: the SHELF defaults minus the ones you removed, then the ones you added (hold OK to change)

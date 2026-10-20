@@ -204,7 +204,7 @@ public class SettingsActivity extends Activity {
         }
 
         private int rowCount() {
-            return screen == MAIN ? 3 : 2;
+            return screen == MAIN ? 4 : 2;
         }
 
         @Override protected void onDraw(Canvas c) {
@@ -238,9 +238,11 @@ public class SettingsActivity extends Activity {
             boolean working = busy();
             String busyText = state.optString("busy");
             String mode = freeActive() ? "Free My TV" : Ui.tr("Original", "Original");
-            String[] labels = {Ui.tr("Início", "Home Screen"), Ui.tr("Tela de Descanso", "Screensaver"), Ui.tr("Ajustes da TV", "TV Settings")};
-            String[] values = {working ? "" : mode, Ui.tr("Ver agora", "Preview"), ""};
-            for (int i = 0; i < 3; i++) {
+            String[] labels = {Ui.tr("Início", "Home Screen"), Ui.tr("Tela de Descanso", "Screensaver"), Ui.tr("Tema", "Theme"),
+                    Ui.tr("Ajustes da TV", "TV Settings")};
+            String[] themes = {Ui.tr("Automático", "Automatic"), Ui.tr("Claro", "Light"), Ui.tr("Escuro", "Dark")};
+            String[] values = {working ? "" : mode, Ui.tr("Ver agora", "Preview"), themes[HomeView.theme(getContext())], ""};
+            for (int i = 0; i < 4; i++) {
                 float y = (LIST_TOP + i * (ROW_H + ROW_GAP)) * k;
                 rowRect.set(LIST_X * k, y, LIST_R * k, y + ROW_H * k);
                 float f = drawRowBackground(c, i);
@@ -249,7 +251,7 @@ public class SettingsActivity extends Activity {
                 float base = rowRect.centerY() + Ui.halfCap(rowLabel);
                 c.drawText(labels[i], rowRect.left + 30 * k, base, rowLabel);
                 float right = rowRect.right - 30 * k;
-                if (i >= 2) {
+                if (i >= 3) {
                     float cw = Symbols.width(getContext(), "chevron_right", 22 * k);
                     Symbols.draw(getContext(), c, "chevron_right", right - cw / 2, rowRect.centerY(), 22 * k, blend(0x66FFFFFF, 0x991C1C1E, f));
                 } else if (i == 0 && working) {
@@ -267,7 +269,7 @@ public class SettingsActivity extends Activity {
                 }
             }
 
-            float y = (LIST_TOP + 3 * (ROW_H + ROW_GAP) + 46) * k;
+            float y = (LIST_TOP + 4 * (ROW_H + ROW_GAP) + 46) * k;
             String error = state.optString("error");
             if (working && (busyText.contains("Permitir") || busyText.contains("Allow"))) {
                 c.drawText(Ui.tr("Na TV: marque “Sempre permitir” e aperte OK.", "On the TV: tick “Always allow” and press OK."),
@@ -473,6 +475,9 @@ public class SettingsActivity extends Activity {
             } else if (focus == 1) {
                 pause();
                 activity.showPreview();
+            } else if (focus == 2) {
+                // Theme: OK steps through Automatic → Light → Dark; the home screen follows when it shows again.
+                HomeView.setTheme(c, (HomeView.theme(c) + 1) % 3);
             } else {
                 activity.startActivity(new Intent(Settings.ACTION_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
             }

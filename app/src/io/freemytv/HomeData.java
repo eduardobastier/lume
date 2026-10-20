@@ -34,9 +34,18 @@ final class HomeData {
     private static final String CURRENCY = Config.CURRENCY.trim().toUpperCase(Locale.ROOT);
     /** Binance quotes dollars as USDT. */
     private static final String QUOTE = CURRENCY.equals("USD") ? "USDT" : CURRENCY;
-    private static final String WEATHER_URL = "https://api.open-meteo.com/v1/forecast?latitude=" + Config.LATITUDE
-            + "&longitude=" + Config.LONGITUDE
-            + "&current=temperature_2m,weather_code,is_day&daily=temperature_2m_max,temperature_2m_min,sunrise,sunset"
+    /** Where the weather is for: the TV's own location, else the network's (IP), else config.properties. */
+    private volatile String lat = Config.LATITUDE, lon = Config.LONGITUDE;
+    volatile String city = Config.CITY.trim();
+    private volatile long locatedAt;
+    private static final long LOCATE_EVERY = 6 * 3600_000L;
+    private final Context context;
+
+    private String weatherUrl() {
+        return "https://api.open-meteo.com/v1/forecast?latitude=" + lat + "&longitude=" + lon + WEATHER_QUERY;
+    }
+
+    private static final String WEATHER_QUERY = "&current=temperature_2m,weather_code,is_day&daily=temperature_2m_max,temperature_2m_min,sunrise,sunset"
             + "&hourly=temperature_2m,weather_code,is_day&timezone=auto&forecast_days=2";
     private static final long PRICES_EVERY = 5 * 60_000L, WEATHER_EVERY = 30 * 60_000L;
     private static final Locale PT = new Locale("pt", "BR");
@@ -91,7 +100,14 @@ final class HomeData {
     private volatile boolean fetchingPrices, fetchingWeather;
 
     private HomeData(Context c) {
+        context = c;
         cache = c.getSharedPreferences("homedata", Context.MODE_PRIVATE);
+        if (cache.contains("lat")) {
+            lat = cache.getString("lat", lat);
+            lon = cache.getString("lon", lon);
+            city = cache.getString("city", city);
+            locatedAt = cache.getLong("locatedAt", 0);
+        }
         try {
             String p = cache.getString("prices", null);
             if (p != null && Config.SHOW_PRICES) parsePrices(p);
@@ -125,11 +141,14 @@ final class HomeData {
                 }
             });
         }
-        if (!fetchingWeather && (now - weatherAt > WEATHER_EVERY || now < weatherAt)) {
+        // Never located yet (or not for 6 hours): fetch now, so the forecast moves to where the TV is.
+        boolean relocate = locatedAt == 0 || now - locatedAt > LOCATE_EVERY;
+        if (!fetchingWeather && (relocate || now - weatherAt > WEATHER_EVERY || now < weatherAt)) {
             fetchingWeather = true;
             io.execute(() -> {
                 try {
-                    String body = get(WEATHER_URL);
+                    locate();
+                    String body = get(weatherUrl());
                     weather = parseWeather(body);
                     weatherAt = System.currentTimeMillis();
                     cache.edit().putString("weather", body).putLong("weatherAt", weatherAt).apply();
@@ -141,6 +160,65 @@ final class HomeData {
                 }
             });
         }
+    }
+
+    /**
+     * Finds where the TV is, at most every 6 hours: the TV's last known location (if it has one and the app may read
+     * it), else the internet connection's location (ipwho.is, then ipapi.co). Keeps the last one found, or the
+     * config.properties city, when neither answers.
+     */
+    private void locate() {
+        long now = System.currentTimeMillis();
+        if (locatedAt != 0 && now - locatedAt < LOCATE_EVERY && now >= locatedAt) return;
+        String la = null, lo = null, name = null;
+        try {
+            android.location.LocationManager lm = (android.location.LocationManager) context.getSystemService(Context.LOCATION_SERVICE);
+            if (lm != null && context.checkSelfPermission(android.Manifest.permission.ACCESS_COARSE_LOCATION)
+                    == android.content.pm.PackageManager.PERMISSION_GRANTED) {
+                android.location.Location best = null;
+                for (String provider : lm.getProviders(true)) {
+                    android.location.Location l = lm.getLastKnownLocation(provider);
+                    if (l != null && (best == null || l.getTime() > best.getTime())) best = l;
+                }
+                if (best != null) {
+                    la = String.format(Locale.US, "%.4f", best.getLatitude());
+                    lo = String.format(Locale.US, "%.4f", best.getLongitude());
+                }
+            }
+        } catch (RuntimeException e) {
+            AppLog.w("tv location: " + e.getMessage());
+        }
+        if (la == null) {
+            for (String url : new String[] {"https://ipwho.is/", "https://ipapi.co/json/"}) {
+                try {
+                    JSONObject o = new JSONObject(get(url));
+                    if (o.has("success") && !o.optBoolean("success")) continue;
+                    if (o.optBoolean("error")) continue;
+                    double a = o.optDouble("latitude", Double.NaN), b = o.optDouble("longitude", Double.NaN);
+                    if (Double.isNaN(a) || Double.isNaN(b)) continue;
+                    la = String.format(Locale.US, "%.4f", a);
+                    lo = String.format(Locale.US, "%.4f", b);
+                    name = o.optString("city", "");
+                    break;
+                } catch (Exception e) {
+                    AppLog.w("network location (" + url + "): " + e.getMessage());
+                }
+            }
+        }
+        if (la == null) return;
+        lat = la;
+        lon = lo;
+        if (name != null && !name.isEmpty()) city = fixCity(name);
+        locatedAt = now;
+        cache.edit().putString("lat", lat).putString("lon", lon).putString("city", city).putLong("locatedAt", now).apply();
+        AppLog.w("weather location: " + city + " (" + lat + ", " + lon + ")");
+    }
+
+    /** IP services drop accents ("Quissama"): the config.properties city wins when it's the same name. */
+    private static String fixCity(String name) {
+        String mine = Config.CITY.trim();
+        String plain = java.text.Normalizer.normalize(mine, java.text.Normalizer.Form.NFD).replaceAll("\\p{M}", "");
+        return !mine.isEmpty() && plain.equalsIgnoreCase(name) ? mine : name;
     }
 
     private void notifyListeners() {
