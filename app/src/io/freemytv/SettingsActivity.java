@@ -98,7 +98,7 @@ public class SettingsActivity extends Activity {
     }
 
     static final class SettingsView extends View implements Choreographer.FrameCallback {
-        private static final int MAIN = 0, HOME_CHOICE = 1, RECS = 2;
+        private static final int MAIN = 0, HOME_CHOICE = 1, RECS = 2, THEME = 3;
         /** The popup over the list: none, the theme, the genres (several at once) or what OK on a card opens. */
         private static final int NO_POPUP = 0, THEME_POPUP = 1, GENRE_POPUP = 2, ACTION_POPUP = 3;
         private int popup = NO_POPUP, popupFocus;
@@ -210,7 +210,7 @@ public class SettingsActivity extends Activity {
         }
 
         private int rowCount() {
-            return screen == MAIN ? 5 : screen == RECS ? 4 : 2;
+            return screen == MAIN ? 5 : screen == RECS ? 4 : screen == THEME ? 3 : 2;
         }
 
         @Override protected void onDraw(Canvas c) {
@@ -237,7 +237,10 @@ public class SettingsActivity extends Activity {
             c.drawText(Ui.tr("Início e tela de descanso da TV", "Your TV's home screen and screensaver"), cx, 660 * k, subtitle);
             c.drawText(versionName(getContext()), cx, 704 * k, version);
 
-            if (screen == MAIN) drawMain(c, seconds); else if (screen == RECS) drawRecsScreen(c); else drawChoice(c);
+            if (screen == MAIN) drawMain(c, seconds);
+            else if (screen == RECS) drawRecsScreen(c);
+            else if (screen == THEME) drawThemeScreen(c);
+            else drawChoice(c);
             if (popup != NO_POPUP) drawPopup(c, dt);
         }
 
@@ -417,6 +420,30 @@ public class SettingsActivity extends Activity {
                     LIST_X * k + 30 * k, (LIST_TOP + 20 + 4 * (ROW_H + ROW_GAP) + 40) * k, hint);
         }
 
+        /** Theme: a list like Recommendations, with a check on the current one. */
+        private void drawThemeScreen(Canvas c) {
+            Paint heading = Ui.text(Ui.displaySemibold, 34 * k, 0xFFFFFFFF);
+            c.drawText(Ui.tr("Tema", "Theme"), LIST_X * k + 30 * k, (LIST_TOP - 24) * k, heading);
+            String[] names = themes();
+            String[] notes = {Ui.tr("Claro de dia, escuro depois do pôr do sol", "Light by day, dark after sunset"),
+                    Ui.tr("Sempre claro", "Always light"), Ui.tr("Sempre escuro", "Always dark")};
+            int current = HomeView.theme(getContext());
+            for (int i = 0; i < 3; i++) {
+                float y = (LIST_TOP + 20 + i * (ROW_H + ROW_GAP)) * k;
+                rowRect.set(LIST_X * k, y, LIST_R * k, y + ROW_H * k);
+                float f = drawRowBackground(c, i);
+                rowLabel.setColor(blend(0xF2FFFFFF, INK, f));
+                float base = rowRect.centerY() + Ui.halfCap(rowLabel);
+                c.drawText(names[i], rowRect.left + 30 * k, base, rowLabel);
+                rowValue.setColor(blend(0x8CFFFFFF, 0x8C1C1C1E, f));
+                float cw = Symbols.width(getContext(), "check", 24 * k);
+                c.drawText(notes[i], rowRect.right - 30 * k - cw - 24 * k, base, rowValue);
+                if (i == current) {
+                    Symbols.draw(getContext(), c, "check", rowRect.right - 30 * k - cw / 2, rowRect.centerY(), 24 * k, blend(0xFFFFFFFF, INK, f));
+                }
+            }
+        }
+
         private String popupTitle() {
             return popup == THEME_POPUP ? Ui.tr("Tema", "Theme") : popup == GENRE_POPUP ? Ui.tr("Categorias", "Genres")
                     : Ui.tr("Ao apertar OK no card", "OK on a card");
@@ -573,7 +600,7 @@ public class SettingsActivity extends Activity {
                         if (e.getRepeatCount() == 0) backDown = true;
                     } else {
                         if (backDown && !e.isCanceled()) {
-                            focus = screen == RECS ? 3 : 0;
+                            focus = screen == RECS ? 3 : screen == THEME ? 2 : 0;
                             screen = MAIN;
                         }
                         backDown = false;
@@ -636,6 +663,14 @@ public class SettingsActivity extends Activity {
 
         private void activate() {
             Context c = getContext();
+            if (screen == THEME) {
+                HomeView.setTheme(c, focus);   // the home screen follows when it shows again
+                screen = MAIN;
+                focus = 2;
+                for (Spring s : pop) s.snap(0);
+                invalidate();
+                return;
+            }
             if (screen == HOME_CHOICE) {
                 boolean wantFree = focus == 0;
                 if (wantFree != freeActive() && !busy()) {
@@ -659,7 +694,8 @@ public class SettingsActivity extends Activity {
                 pause();
                 activity.showPreview();
             } else if (focus == 2) {
-                openPopup(THEME_POPUP);   // the home screen follows the choice when it shows again
+                screen = THEME;
+                focus = HomeView.theme(c);
             } else if (focus == 3) {
                 screen = RECS;
                 focus = 0;
