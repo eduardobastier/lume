@@ -180,9 +180,11 @@ public class SettingsActivity extends Activity {
     }
 
     static final class SettingsView extends View implements Choreographer.FrameCallback {
-        private static final int MAIN = 0, HOME_CHOICE = 1, RECS = 2, THEME = 3, MAIN_ROWS = 7;
+        private static final int MAIN = 0, HOME_CHOICE = 1, RECS = 2, THEME = 3, SAVER = 4, MAIN_ROWS = 7;
+        /** How long the TV waits before the screensaver (Android's screen-off timeout), in minutes. */
+        private static final int[] SAVER_MINUTES = {1, 2, 5, 10, 15, 30, 60};
         /** The popup over the list: none, the theme, the genres (several at once) or what OK on a card opens. */
-        private static final int NO_POPUP = 0, THEME_POPUP = 1, GENRE_POPUP = 2, ACTION_POPUP = 3, LIVE_POPUP = 4;
+        private static final int NO_POPUP = 0, THEME_POPUP = 1, GENRE_POPUP = 2, ACTION_POPUP = 3, LIVE_POPUP = 4, SAVER_POPUP = 5;
         /** Live TV choices: [value, name], built when the popup opens (the TV's inputs and installed apps). */
         private List<String[]> liveChoices = new ArrayList<>();
         private int popup = NO_POPUP, popupFocus;
@@ -343,6 +345,7 @@ public class SettingsActivity extends Activity {
             if (screen == RECS) return Ui.tr("Recomendações", "Recommendations");
             if (screen == THEME) return Ui.tr("Tema", "Theme");
             if (screen == HOME_CHOICE) return Ui.tr("Início", "Home Screen");
+            if (screen == SAVER) return Ui.tr("Tela de Descanso", "Screensaver");
             return Ui.tr("Ajustes do Início", "Home Settings");
         }
 
@@ -355,7 +358,7 @@ public class SettingsActivity extends Activity {
         }
 
         private int rowCount() {
-            return screen == MAIN ? MAIN_ROWS : screen == RECS ? 5 : screen == THEME ? 3 : 2;
+            return screen == MAIN ? MAIN_ROWS : screen == RECS ? 5 : screen == THEME ? 3 : screen == SAVER ? 2 : 2;
         }
 
         @Override protected void onDraw(Canvas c) {
@@ -382,6 +385,7 @@ public class SettingsActivity extends Activity {
             if (screen == MAIN) drawMain(c, seconds);
             else if (screen == RECS) drawRecsScreen(c);
             else if (screen == THEME) drawThemeScreen(c);
+            else if (screen == SAVER) drawSaverScreen(c);
             else drawChoice(c);
             if (popup != NO_POPUP) drawPopup(c, dt);
         }
@@ -393,7 +397,7 @@ public class SettingsActivity extends Activity {
             String[] labels = {Ui.tr("Início", "Home Screen"), Ui.tr("Tela de Descanso", "Screensaver"), Ui.tr("Tema", "Theme"),
                     Ui.tr("TV ao Vivo", "Live TV"), Ui.tr("Sons ao navegar", "Navigation sounds"),
                     Ui.tr("Recomendações", "Recommendations"), Ui.tr("Ajustes da TV", "TV Settings")};
-            String[] values = {working ? "" : mode, Ui.tr("Ver agora", "Preview"), themes()[HomeView.theme(getContext())],
+            String[] values = {working ? "" : mode, saverName(), themes()[HomeView.theme(getContext())],
                     liveName(), Prefs.sounds(getContext()) ? Ui.tr("Sim", "On") : Ui.tr("Não", "Off"), "", ""};
             for (int i = 0; i < MAIN_ROWS; i++) {
                 float y = (LIST_TOP + i * (ROW_H + ROW_GAP)) * k;
@@ -404,8 +408,8 @@ public class SettingsActivity extends Activity {
                 float base = rowRect.centerY() + Ui.halfCap(rowLabel);
                 c.drawText(labels[i], rowRect.left + 30 * k, base, rowLabel);
                 float right = rowRect.right - 30 * k;
-                if (i >= 5 || i == 2 || i == 3) {
-                    if (i == 2 || i == 3) {
+                if (i >= 5 || (i >= 1 && i <= 3)) {
+                    if (i >= 1 && i <= 3) {
                         rowValue.setColor(blend(fg(0x8CFFFFFF), 0x8C1C1C1E, f));
                         float cw = Symbols.width(getContext(), "chevron_right", 22 * k);
                         c.drawText(values[i], right - cw - 14 * k, base, rowValue);
@@ -545,6 +549,57 @@ public class SettingsActivity extends Activity {
                     LIST_X * k + 30 * k, (LIST_TOP + 20 + 5 * (ROW_H + ROW_GAP) + 40) * k, hint);
         }
 
+        private int saverMinutes() {
+            int ms = android.provider.Settings.System.getInt(getContext().getContentResolver(),
+                    android.provider.Settings.System.SCREEN_OFF_TIMEOUT, 600_000);
+            return Math.max(1, Math.round(ms / 60_000f));
+        }
+
+        private String minutes(int m) {
+            if (m >= 60 && m % 60 == 0) return m / 60 + " h";
+            return m + " min";
+        }
+
+        private String saverName() {
+            return Ui.tr("Após ", "After ") + minutes(saverMinutes());
+        }
+
+        /** Screensaver: preview it, and how long the TV waits before it starts. */
+        private void drawSaverScreen(Canvas c) {
+            String[] labels = {Ui.tr("Ver agora", "Preview"), Ui.tr("Começar após", "Start after")};
+            String[] values = {"", minutes(saverMinutes()) + Ui.tr(" sem usar o controle", " without using the remote")};
+            for (int i = 0; i < 2; i++) {
+                float y = (LIST_TOP + 20 + i * (ROW_H + ROW_GAP)) * k;
+                rowRect.set(LIST_X * k, y, LIST_R * k, y + ROW_H * k);
+                float f = drawRowBackground(c, i);
+                rowLabel.setColor(blend(fg(0xF2FFFFFF), INK, f));
+                float base = rowRect.centerY() + Ui.halfCap(rowLabel);
+                c.drawText(labels[i], rowRect.left + 30 * k, base, rowLabel);
+                rowValue.setColor(blend(fg(0x8CFFFFFF), 0x8C1C1C1E, f));
+                c.drawText(values[i], rowRect.right - 30 * k, base, rowValue);
+            }
+            int sleep = android.provider.Settings.Secure.getInt(getContext().getContentResolver(), "sleep_timeout", -1);
+            Paint hint = Ui.text(Ui.regular, 23 * k, fg(0x8CFFFFFF));
+            String note = sleep > 0 && sleep <= saverMinutes() * 60_000
+                    ? Ui.tr("A TV desliga antes (Ajustes da TV → Energia): a tela de descanso não chega a aparecer.",
+                            "The TV turns off first (TV Settings → Power): the screensaver won't show.")
+                    : Ui.tr("Vale para a TV toda, como nos Ajustes da TV.", "Applies to the whole TV, like TV Settings.");
+            c.drawText(note, LIST_X * k + 30 * k, (LIST_TOP + 20 + 2 * (ROW_H + ROW_GAP) + 40) * k, hint);
+        }
+
+        /** Saves the wait with the TV's own ADB (this app may not write system settings itself). */
+        private void setSaverMinutes(int m) {
+            final Context app = getContext().getApplicationContext();
+            new Thread(() -> {
+                try (Adb adb = Adb.connect(app, 10_000, null)) {
+                    adb.shell("settings put system screen_off_timeout " + m * 60_000);
+                } catch (Exception e) {
+                    AppLog.w("screensaver wait: " + e.getMessage());
+                }
+                handler.post(this::invalidate);
+            }).start();
+        }
+
         /** Theme: a list like Recommendations, with a check on the current one. */
         private void drawThemeScreen(Canvas c) {
             String[] names = themes();
@@ -595,6 +650,7 @@ public class SettingsActivity extends Activity {
 
         private String popupTitle() {
             if (popup == LIVE_POPUP) return Ui.tr("TV ao Vivo abre", "Live TV opens");
+            if (popup == SAVER_POPUP) return Ui.tr("Começar após", "Start after");
             return popup == THEME_POPUP ? Ui.tr("Tema", "Theme") : popup == GENRE_POPUP ? Ui.tr("Categorias", "Genres")
                     : Ui.tr("Ao apertar OK no card", "OK on a card");
         }
@@ -602,6 +658,11 @@ public class SettingsActivity extends Activity {
         private String[] popupOptions() {
             if (popup == THEME_POPUP) return themes();
             if (popup == ACTION_POPUP) return actions();
+            if (popup == SAVER_POPUP) {
+                String[] out = new String[SAVER_MINUTES.length];
+                for (int i = 0; i < out.length; i++) out[i] = minutes(SAVER_MINUTES[i]);
+                return out;
+            }
             if (popup == LIVE_POPUP) {
                 String[] names = new String[liveChoices.size()];
                 for (int i = 0; i < names.length; i++) names[i] = liveChoices.get(i)[1];
@@ -615,6 +676,7 @@ public class SettingsActivity extends Activity {
         private boolean popupChecked(int i) {
             if (popup == THEME_POPUP) return HomeView.theme(getContext()) == i;
             if (popup == ACTION_POPUP) return actionIndex() == i;
+            if (popup == SAVER_POPUP) return SAVER_MINUTES[i] == saverMinutes();
             if (popup == LIVE_POPUP) return liveChoices.get(i)[0].equals(Prefs.liveTv(getContext()));
             return Prefs.genres(getContext()).contains(Prefs.GENRES[i][0]);
         }
@@ -667,8 +729,8 @@ public class SettingsActivity extends Activity {
         private void openPopup(int kind) {
             popup = kind;
             popupFocus = kind == THEME_POPUP ? HomeView.theme(getContext()) : kind == ACTION_POPUP ? actionIndex() : 0;
-            if (kind == LIVE_POPUP) {
-                for (int i = 0; i < liveChoices.size(); i++) if (popupChecked(i)) popupFocus = i;
+            if (kind == LIVE_POPUP || kind == SAVER_POPUP) {
+                for (int i = 0; i < popupOptions().length; i++) if (popupChecked(i)) popupFocus = i;
             }
             for (Spring s : popupPop) s.snap(0);
         }
@@ -759,7 +821,7 @@ public class SettingsActivity extends Activity {
                         if (e.getRepeatCount() == 0) backDown = true;
                     } else {
                         if (backDown && !e.isCanceled()) {
-                            focus = screen == RECS ? 5 : screen == THEME ? 2 : 0;
+                            focus = screen == RECS ? 5 : screen == THEME ? 2 : screen == SAVER ? 1 : 0;
                             screen = MAIN;
                         }
                         backDown = false;
@@ -807,6 +869,9 @@ public class SettingsActivity extends Activity {
                         } else if (popup == ACTION_POPUP) {
                             Prefs.setCardAction(c, ACTION_KEYS[popupFocus]);
                             popup = NO_POPUP;
+                        } else if (popup == SAVER_POPUP) {
+                            setSaverMinutes(SAVER_MINUTES[popupFocus]);
+                            popup = NO_POPUP;
                         } else if (popup == LIVE_POPUP) {
                             Prefs.setLiveTv(c, liveChoices.get(popupFocus)[0]);
                             popup = NO_POPUP;
@@ -852,6 +917,15 @@ public class SettingsActivity extends Activity {
                 }
                 screen = MAIN;
                 focus = 0;
+            } else if (screen == SAVER) {
+                if (focus == 0) {
+                    pause();
+                    activity.showPreview();
+                } else {
+                    openPopup(SAVER_POPUP);
+                }
+                invalidate();
+                return;
             } else if (screen == RECS) {
                 if (focus == 0) activity.askTmdbKey();
                 else if (focus == 1) openPopup(GENRE_POPUP);
@@ -865,8 +939,8 @@ public class SettingsActivity extends Activity {
                 screen = HOME_CHOICE;
                 focus = freeActive() ? 0 : 1;
             } else if (focus == 1) {
-                pause();
-                activity.showPreview();
+                screen = SAVER;
+                focus = 0;
             } else if (focus == 2) {
                 screen = THEME;
                 focus = HomeView.theme(c);
