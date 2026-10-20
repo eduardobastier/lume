@@ -117,6 +117,7 @@ final class Recs {
 
     private Recs(Context c) {
         context = c;
+        app = c;
         cache = c.getSharedPreferences("recs", Context.MODE_PRIVATE);
         if (cache.getInt("version", 0) != CACHE_VERSION) cache.edit().clear().putInt("version", CACHE_VERSION).apply();
         try {
@@ -139,7 +140,8 @@ final class Recs {
 
     /** With a YouTube key (config.properties "youtube_key"), the picks are what's trending on YouTube instead. */
     /** recs_all=true: Brazil's top movies and shows on any streaming service, not only the TV's apps. */
-    private static final boolean ALL = Config.RECS_ALL;
+    /** The app's context, for the choices in Home Settings (Prefs). */
+    private static Context app;
 
     /** A pick worth showing: on one of the TV's apps or, with recs_all, on any service in your country. */
     /** recs_genres (thriller, action, comedy, ...) → TMDB genre ids, for movies and for shows (TMDB numbers them apart). */
@@ -152,12 +154,22 @@ final class Recs {
         {"scifi", "878", "10765"},
         {"animation", "16", "16"},
         {"romance", "10749", "10766"},
+        {"crime", "80", "80"},
+        {"adventure", "12", "10759"},
+        {"fantasy", "14", "10765"},
+        {"family", "10751", "10751"},
+        {"documentary", "99", "99"},
     };
+
+    /** Anime and cartoons only come up when chosen among the genres. */
+    private static boolean animation() {
+        return Prefs.genres(app).contains("animation");
+    }
 
     /** The genre ids to keep for "movie" or "tv", joined with "|" (TMDB's "any of"), or "" for every genre. */
     private static String genres(String kind) {
         StringBuilder out = new StringBuilder();
-        for (String g : Config.RECS_GENRES.toLowerCase(Locale.ROOT).split("[,\\s]+")) {
+        for (String g : Prefs.genres(app)) {
             for (String[] row : GENRE_IDS) {
                 if (row[0].equals(g)) out.append(out.length() == 0 ? "" : "|").append(kind.equals("movie") ? row[1] : row[2]);
             }
@@ -166,11 +178,11 @@ final class Recs {
     }
 
     /** recs_recent=true: only new releases (movies from the past 4 months, shows that premiered in the past 6). */
-    private static final boolean RECENT = Config.RECS_RECENT;
+
     private static final int MOVIE_DAYS = 120, SHOW_DAYS = 180;
 
     private static boolean usable(Pick p) {
-        return p.pkg != null || (ALL && p.where != null);
+        return p.pkg != null || (Prefs.anyService(app) && p.where != null);
     }
 
     static boolean youtube() {
@@ -290,7 +302,7 @@ final class Recs {
     void refreshIfStale() {
         if (!hasKey(context) || fetching) return;
         long now = System.currentTimeMillis();
-        long stamp = (RECENT ? 13 : 0) + Config.RECS_GENRES.hashCode() * 131L + (ALL ? 7 : 0) + (Config.TMDB_KEY.hashCode() * 31L + REGION.hashCode()) * 31L + Config.YOUTUBE_KEY.hashCode();   // a new key or country refetches
+        long stamp = (Prefs.recent(app) ? 13 : 0) + Prefs.signature(app) * 131L + (Prefs.anyService(app) ? 7 : 0) + (Config.TMDB_KEY.hashCode() * 31L + REGION.hashCode()) * 31L + Config.YOUTUBE_KEY.hashCode();   // a new key or country refetches
         boolean newKey = stamp != keyStamp;
         long sinceFail = now - failedAt;    // negative = the clock went back: don't wait
         if (!newKey && failedAt != 0 && sinceFail >= 0 && sinceFail < 10 * 60_000L) return;
@@ -533,19 +545,19 @@ final class Recs {
             String[] s = service(o.optString("provider_name"));
             if (s != null && installed(s[2])) services.put(o.getInt("provider_id"), s);
         }
-        if (services.isEmpty() && !ALL) throw new IOException("none of the TV's streaming services are on TMDB");
+        if (services.isEmpty() && !Prefs.anyService(app)) throw new IOException("none of the TV's streaming services are on TMDB");
         StringBuilder ids = new StringBuilder();
         for (int id : services.keySet()) ids.append(ids.length() == 0 ? "" : "|").append(id);
         String common = "&language=" + lang() + "&watch_region=" + REGION + "&with_watch_monetization_types=flatrate&include_adult=false"
-                + "&sort_by=popularity.desc&without_genres=" + NO_GENRES
-                + (ALL ? "" : "&with_watch_providers=" + URLEncoder.encode(ids.toString(), "UTF-8"));
+                + "&sort_by=popularity.desc" + (animation() ? "" : "&without_genres=" + NO_GENRES)
+                + (Prefs.anyService(app) ? "" : "&with_watch_providers=" + URLEncoder.encode(ids.toString(), "UTF-8"));
         // 1. Trending this week (TMDB goes by what people are watching and searching for right now), only what is
         //    on one of the TV's services: the details say where (and are then ready).
         List<Pick> hotMovies = new ArrayList<>(), hotShows = new ArrayList<>();
         for (String kind : new String[] {"movie", "tv"}) {
             JSONArray hot = get("/trending/" + kind + "/week?language=" + lang()).getJSONArray("results");
             List<Pick> candidates = new ArrayList<>();
-            for (int i = 0; i < hot.length() && i < (ALL ? 30 : 20); i++) add(candidates, hot.getJSONObject(i), kind);
+            for (int i = 0; i < hot.length() && i < (Prefs.anyService(app) ? 30 : 20); i++) add(candidates, hot.getJSONObject(i), kind);
             for (Pick pick : candidates) {
                 try {
                     fetchDetails(pick);
@@ -558,11 +570,11 @@ final class Recs {
         // 2. Recent releases on the TV's services: movies from the past year and shows with a new episode in the
         //    past 3 months.
         String mg = genres("movie"), tg = genres("tv");
-        JSONArray movies = get("/discover/movie?vote_count.gte=" + (RECENT ? 10 : 30) + "&primary_release_date.gte=" + day(RECENT ? -MOVIE_DAYS : -365)
+        JSONArray movies = get("/discover/movie?vote_count.gte=" + (Prefs.recent(app) ? 10 : 30) + "&primary_release_date.gte=" + day(Prefs.recent(app) ? -MOVIE_DAYS : -365)
                 + "&primary_release_date.lte=" + day(0) + common
                 + (mg.isEmpty() ? "" : "&with_genres=" + URLEncoder.encode(mg, "UTF-8"))).getJSONArray("results");
-        JSONArray shows = get("/discover/tv?vote_count.gte=" + (RECENT ? 5 : 20)
-                + (RECENT ? "&first_air_date.gte=" + day(-SHOW_DAYS) + "&first_air_date.lte=" + day(0)
+        JSONArray shows = get("/discover/tv?vote_count.gte=" + (Prefs.recent(app) ? 5 : 20)
+                + (Prefs.recent(app) ? "&first_air_date.gte=" + day(-SHOW_DAYS) + "&first_air_date.lte=" + day(0)
                           : "&air_date.gte=" + day(-90) + "&air_date.lte=" + day(0))
                 + common + (tg.isEmpty() ? "" : "&with_genres=" + URLEncoder.encode(tg, "UTF-8"))).getJSONArray("results");
         List<Pick> newMovies = new ArrayList<>(), newShows = new ArrayList<>();
@@ -603,8 +615,8 @@ final class Recs {
         String backdrop = o.optString("backdrop_path", "");
         if (backdrop.isEmpty() || "null".equals(backdrop)) return;
         JSONArray gids = o.optJSONArray("genre_ids");
-        for (int i = 0; gids != null && i < gids.length(); i++) if (String.valueOf(gids.optInt(i)).equals(NO_GENRES)) return;
-        if (RECENT) {
+        for (int i = 0; gids != null && !animation() && i < gids.length(); i++) if (String.valueOf(gids.optInt(i)).equals(NO_GENRES)) return;
+        if (Prefs.recent(app)) {
             String date = o.optString(kind.equals("movie") ? "release_date" : "first_air_date", "");
             if (date.length() < 10 || date.compareTo(day(kind.equals("movie") ? -MOVIE_DAYS : -SHOW_DAYS)) < 0) return;
         }

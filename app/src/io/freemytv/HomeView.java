@@ -1903,11 +1903,22 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         } else if (zone == Z_CARDS) {
             Recs.Pick p = cardIndex < cards.size() ? cards.get(cardIndex) : null;
             if (p == null) return;
-            // The synopsis shows while the card has focus; OK plays the trailer on YouTube (dubbed first, then
-            // subtitled) or, when TMDB has none, opens YouTube's search for it.
-            it = HomeApps.app("com.google.android.youtube.tv", "YouTube");
-            it.uri = p.trailer != null ? "https://www.youtube.com/watch?v=" + p.trailer
-                    : "https://www.youtube.com/results?search_query=" + Uri.encode(p.title + " trailer oficial dublado");
+            // The synopsis shows while the card has focus; OK does what Home Settings says: the trailer (dubbed first)
+            // on YouTube or SmartTube, or the title's page in Nuvio. Without the chosen app, YouTube.
+            String action = Prefs.cardAction(getContext());
+            String smart = Prefs.smartTube(getContext());
+            boolean nuvio = action.equals(Prefs.NUVIO) && p.video == null
+                    && HomeApps.launchIntent(getContext().getPackageManager(), Prefs.NUVIO_PKG) != null;
+            if (nuvio) {
+                it = HomeApps.app(Prefs.NUVIO_PKG, "Nuvio");
+                it.uri = "nuvio://meta?type=" + (p.kind.equals("movie") ? "movie" : "series") + "&tmdb=" + p.id;
+            } else {
+                boolean st = action.equals(Prefs.SMARTTUBE) && smart != null;
+                it = HomeApps.app(st ? smart : Prefs.YOUTUBE_PKG, st ? "SmartTube" : "YouTube");
+                String video = p.video != null ? p.video : p.trailer;
+                it.uri = video != null ? "https://www.youtube.com/watch?v=" + video
+                        : "https://www.youtube.com/results?search_query=" + Uri.encode(p.title + " trailer dublado");
+            }
             r = cardRects[cardIndex];
         } else {
             if (shelf.isEmpty()) return;
