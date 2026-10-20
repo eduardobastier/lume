@@ -159,6 +159,17 @@ final class Recs {
         }
     }
 
+    /** The streaming apps the recommendations know (only the installed ones, with `installed`), by name. */
+    static List<String> knownServices(Context c, boolean installed) {
+        List<String> out = new ArrayList<>();
+        for (String[] sv : SERVICES) {
+            if (installed && HomeApps.launchIntent(c.getPackageManager(), sv[2]) == null) continue;
+            String name = SERVICE_NAME.get(sv[1]);
+            if (name != null && !out.contains(name)) out.add(name);
+        }
+        return out;
+    }
+
     static boolean hasKey(Context c) {
         return youtube() || !Prefs.tmdbKey(c).isEmpty();
     }

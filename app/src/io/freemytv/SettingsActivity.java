@@ -13,6 +13,7 @@ import android.os.Handler;
 import android.os.Looper;
 import android.os.SystemClock;
 import android.provider.Settings;
+import android.text.StaticLayout;
 import android.text.TextPaint;
 import android.text.TextUtils;
 import android.view.Choreographer;
@@ -650,6 +651,30 @@ public class SettingsActivity extends Activity {
                     right - cw - 14 * k, base, rowValue);
         }
 
+        private String popupNote() {
+            if (popup != YES_NO_POPUP) return "";
+            if (yesNoKey.equals("recs_all")) {
+                List<String> mine = new ArrayList<>();
+                for (String name : Recs.knownServices(getContext(), true)) mine.add(name);
+                return Ui.tr("Sim: o que está em alta em qualquer streaming do Brasil, mesmo sem o app na TV.\n"
+                        + "Não: só títulos dos streamings instalados nesta TV ("
+                        + (mine.isEmpty() ? "nenhum agora" : String.join(", ", mine)) + "). O app reconhece "
+                        + String.join(", ", Recs.knownServices(getContext(), false)) + ".",
+                        "On: what's trending on any streaming service, even without its app on the TV.\n"
+                        + "Off: only titles on the streaming apps installed on this TV ("
+                        + (mine.isEmpty() ? "none now" : String.join(", ", mine)) + "). Known apps: "
+                        + String.join(", ", Recs.knownServices(getContext(), false)) + ".");
+            }
+            if (yesNoKey.equals("recs_recent")) {
+                return Ui.tr("Sim: só filmes dos últimos 4 meses e séries que estrearam nos últimos 6.\n"
+                        + "Não: tudo o que está em alta, incluindo títulos antigos e temporadas novas.",
+                        "On: only movies from the last 4 months and shows that premiered in the last 6.\n"
+                        + "Off: everything trending, older titles and new seasons too.");
+            }
+            return Ui.tr("Os cliques suaves ao mover o foco e ao abrir, no Início e nos Ajustes.",
+                    "The soft clicks when moving the focus and opening things, on the home screen and in Settings.");
+        }
+
         private String popupTitle() {
             if (popup == LIVE_POPUP) return Ui.tr("TV ao Vivo abre", "Live TV opens");
             if (popup == SAVER_POPUP) return Ui.tr("Começar após", "Start after");
@@ -693,6 +718,15 @@ public class SettingsActivity extends Activity {
             int cols = grid ? 2 : 1, rows = (options.length + cols - 1) / cols;
             float rowH = rows > 9 ? 58 : 70, gap = 8, colW = grid ? (popup == LIVE_POPUP ? 470 : 400) : 640, pad = 36, head = 96,
                     foot = popup == GENRE_POPUP ? 56 : 24;
+            // An explanation under the options (the Yes/No choices say what each one does).
+            String note = popupNote();
+            StaticLayout noteLayout = null;
+            if (!note.isEmpty()) {
+                TextPaint np = new TextPaint(Ui.text(Ui.regular, 23 * k, fg(0xA6FFFFFF)));
+                int width = Math.round((cols * colW + (cols - 1) * 16 - 20) * k);
+                noteLayout = StaticLayout.Builder.obtain(note, 0, note.length(), np, width).setLineSpacing(0, 1.12f).build();
+                foot += noteLayout.getHeight() / k + 20;
+            }
             float pw = cols * colW + (cols - 1) * 16 + 2 * pad, ph = head + rows * (rowH + gap) + foot;
             float left = (1920 - pw) / 2 * k, top = (1080 - ph) / 2 * k;
             Paint dim = new Paint();
@@ -723,6 +757,12 @@ public class SettingsActivity extends Activity {
                     float cw = Symbols.width(getContext(), "check", 24 * k);
                     Symbols.draw(getContext(), c, "check", rowRect.right - 26 * k - cw / 2, rowRect.centerY(), 24 * k, blend(fg(0xFFFFFFFF), INK, f));
                 }
+            }
+            if (noteLayout != null) {
+                c.save();
+                c.translate(left + pad * k + 10 * k, top + (head + rows * (rowH + gap) + 12) * k);
+                noteLayout.draw(c);
+                c.restore();
             }
             if (popup == GENRE_POPUP) {
                 Paint hint = Ui.text(Ui.regular, 22 * k, fg(0x8CFFFFFF));
