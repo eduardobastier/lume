@@ -49,6 +49,20 @@ final class Prefs {
         ui(c).edit().putString("recs_genres", String.join(",", list)).apply();
     }
 
+    /** The TMDB key typed on the TV (Home Settings → Recommendations); without one, the key built into the app. */
+    static String tmdbKey(Context c) {
+        String typed = ui(c).getString("tmdb_key", "").trim();
+        return typed.isEmpty() ? Config.TMDB_KEY.trim() : typed;
+    }
+
+    static boolean typedTmdbKey(Context c) {
+        return !ui(c).getString("tmdb_key", "").trim().isEmpty();
+    }
+
+    static void setTmdbKey(Context c, String key) {
+        ui(c).edit().putString("tmdb_key", key == null ? "" : key.trim()).apply();
+    }
+
     static boolean recent(Context c) {
         return ui(c).getBoolean("recs_recent", Config.RECS_RECENT);
     }

@@ -83,6 +83,47 @@ public class SettingsActivity extends Activity {
         return super.dispatchKeyEvent(event);
     }
 
+    /**
+     * Recommendations → TMDB key: typed with the TV's keyboard, checked with TMDB before it's kept. Empty = go back to
+     * the key built into the app (if any).
+     */
+    void askTmdbKey() {
+        final android.widget.EditText field = new android.widget.EditText(this);
+        field.setSingleLine(true);
+        field.setHint(Ui.tr("Chave da API (v3) ou token de leitura", "API key (v3) or read access token"));
+        field.setText(Prefs.typedTmdbKey(this) ? Prefs.tmdbKey(this) : "");
+        field.setInputType(android.text.InputType.TYPE_CLASS_TEXT | android.text.InputType.TYPE_TEXT_VARIATION_VISIBLE_PASSWORD);
+        android.widget.FrameLayout box = new android.widget.FrameLayout(this);
+        int pad = Math.round(24 * getResources().getDisplayMetrics().density);
+        box.setPadding(pad, pad / 2, pad, 0);
+        box.addView(field);
+        new android.app.AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+                .setTitle(Ui.tr("Chave do TMDB", "TMDB key"))
+                .setMessage(Ui.tr("Grátis em themoviedb.org → Ajustes → API. Deixe vazio para usar a chave do app.",
+                        "Free at themoviedb.org → Settings → API. Leave empty to use the app's key."))
+                .setView(box)
+                .setPositiveButton(Ui.tr("Salvar", "Save"), (d, w) -> saveTmdbKey(field.getText().toString().trim()))
+                .setNegativeButton(Ui.tr("Cancelar", "Cancel"), null)
+                .show();
+        field.requestFocus();
+    }
+
+    private void saveTmdbKey(final String key) {
+        if (key.isEmpty()) {
+            Prefs.setTmdbKey(this, "");
+            return;
+        }
+        final android.content.Context app = getApplicationContext();
+        new Thread(() -> {
+            boolean ok = Recs.validKey(key);
+            if (ok) Prefs.setTmdbKey(app, key);
+            new Handler(Looper.getMainLooper()).post(() -> android.widget.Toast.makeText(app, ok
+                    ? Ui.tr("Chave salva. As recomendações vão aparecer no Início.", "Key saved. Recommendations will show on the home screen.")
+                    : Ui.tr("O TMDB não aceitou essa chave. Confira e tente de novo.", "TMDB didn't accept that key. Check it and try again."),
+                    android.widget.Toast.LENGTH_LONG).show());
+        }).start();
+    }
+
     void showPreview() {
         preview = new DreamView(this);
         setContentView(preview);
@@ -210,7 +251,7 @@ public class SettingsActivity extends Activity {
         }
 
         private int rowCount() {
-            return screen == MAIN ? 5 : screen == RECS ? 4 : screen == THEME ? 3 : 2;
+            return screen == MAIN ? 5 : screen == RECS ? 5 : screen == THEME ? 3 : 2;
         }
 
         @Override protected void onDraw(Canvas c) {
@@ -305,7 +346,7 @@ public class SettingsActivity extends Activity {
             String line;
             String error = recs.optString("error");
             int count = recs.optInt("count");
-            if (!hasKey) line = Ui.tr("Sem chave do TMDB: veja o README (config.properties).", "No TMDB key: see the README (config.properties).");
+            if (!hasKey) line = Ui.tr("Sem chave do TMDB: coloque a sua em Recomendações.", "No TMDB key: add yours in Recommendations.");
             else if (!error.isEmpty()) line = Ui.tr("Erro: ", "Error: ") + error + ".";
             else if (count > 0) line = Ui.tr("Ligadas · " + count + " títulos nos apps da TV, 3 novos a cada hora.",
                     "On · " + count + " titles from the TV's apps, 3 new ones every hour.");
@@ -399,11 +440,15 @@ public class SettingsActivity extends Activity {
             Paint heading = Ui.text(Ui.displaySemibold, 34 * k, 0xFFFFFFFF);
             c.drawText(Ui.tr("Recomendações", "Recommendations"), LIST_X * k + 30 * k, (LIST_TOP - 24) * k, heading);
             String yes = Ui.tr("Sim", "On"), no = Ui.tr("Não", "Off");
-            String[] labels = {Ui.tr("Categorias", "Genres"), Ui.tr("Só lançamentos", "New releases only"),
-                    Ui.tr("Em qualquer streaming", "On any streaming service"), Ui.tr("Ao apertar OK no card", "OK on a card")};
-            String[] values = {Prefs.genreNames(ctx), Prefs.recent(ctx) ? yes : no, Prefs.anyService(ctx) ? yes : no,
+            String[] labels = {Ui.tr("Chave do TMDB", "TMDB key"), Ui.tr("Categorias", "Genres"),
+                    Ui.tr("Só lançamentos", "New releases only"), Ui.tr("Em qualquer streaming", "On any streaming service"),
+                    Ui.tr("Ao apertar OK no card", "OK on a card")};
+            String key = Prefs.tmdbKey(ctx);
+            String keyValue = key.isEmpty() ? Ui.tr("Não configurada", "Not set")
+                    : (Prefs.typedTmdbKey(ctx) ? "" : Ui.tr("Do app · ", "Built in · ")) + "••••" + key.substring(Math.max(0, key.length() - 4));
+            String[] values = {keyValue, Prefs.genreNames(ctx), Prefs.recent(ctx) ? yes : no, Prefs.anyService(ctx) ? yes : no,
                     actions()[actionIndex()]};
-            for (int i = 0; i < 4; i++) {
+            for (int i = 0; i < 5; i++) {
                 float y = (LIST_TOP + 20 + i * (ROW_H + ROW_GAP)) * k;
                 rowRect.set(LIST_X * k, y, LIST_R * k, y + ROW_H * k);
                 float f = drawRowBackground(c, i);
@@ -417,7 +462,7 @@ public class SettingsActivity extends Activity {
             }
             Paint hint = Ui.text(Ui.regular, 23 * k, 0x8CFFFFFF);
             c.drawText(Ui.tr("As mudanças aparecem quando você voltar ao Início.", "Changes show up when you go back home."),
-                    LIST_X * k + 30 * k, (LIST_TOP + 20 + 4 * (ROW_H + ROW_GAP) + 40) * k, hint);
+                    LIST_X * k + 30 * k, (LIST_TOP + 20 + 5 * (ROW_H + ROW_GAP) + 40) * k, hint);
         }
 
         /** Theme: a list like Recommendations, with a check on the current one. */
@@ -680,9 +725,10 @@ public class SettingsActivity extends Activity {
                 screen = MAIN;
                 focus = 0;
             } else if (screen == RECS) {
-                if (focus == 0) openPopup(GENRE_POPUP);
-                else if (focus == 1) Prefs.set(c, "recs_recent", !Prefs.recent(c));
-                else if (focus == 2) Prefs.set(c, "recs_all", !Prefs.anyService(c));
+                if (focus == 0) activity.askTmdbKey();
+                else if (focus == 1) openPopup(GENRE_POPUP);
+                else if (focus == 2) Prefs.set(c, "recs_recent", !Prefs.recent(c));
+                else if (focus == 3) Prefs.set(c, "recs_all", !Prefs.anyService(c));
                 else openPopup(ACTION_POPUP);
                 invalidate();
                 return;

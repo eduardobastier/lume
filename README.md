@@ -85,6 +85,8 @@ Changed something? Run `./build.sh` and install again. Keep `freemytv.keystore`:
 
 Free, and it takes two minutes: create an account at [themoviedb.org](https://www.themoviedb.org/signup), then open [Settings → API](https://www.themoviedb.org/settings/api) and request a developer key. Paste the *API Read Access Token* (or the *API Key*) after `tmdb_key=`. It's your key: `config.properties` stays out of git.
 
+Or leave `tmdb_key` empty and type the key on the TV: *Free My TV* → *Recommendations* → *TMDB key* (the TV's keyboard; TMDB checks it before it's kept). That's the way to share one APK: each TV uses its own key.
+
 ## Going back
 
 On the TV: *Free My TV* → *Home Screen* → *Original*. The factory home screen, screensaver and every app come back exactly as they were. If the new home screen ever crashes three times in five minutes, it switches back by itself.

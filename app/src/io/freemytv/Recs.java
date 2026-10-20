@@ -134,8 +134,27 @@ final class Recs {
     void addListener(Listener l) { if (!listeners.contains(l)) listeners.add(l); }
     void removeListener(Listener l) { listeners.remove(l); }
 
+    /** Checks a TMDB key (the settings screen, before keeping one typed on the TV). Network: not on the UI thread. */
+    static boolean validKey(String key) {
+        try {
+            boolean bearer = key.startsWith("eyJ");
+            HttpURLConnection c = (HttpURLConnection) new URL(API + "/configuration"
+                    + (bearer ? "" : "?api_key=" + URLEncoder.encode(key, "UTF-8"))).openConnection();
+            c.setConnectTimeout(8000);
+            c.setReadTimeout(8000);
+            if (bearer) c.setRequestProperty("Authorization", "Bearer " + key);
+            try {
+                return c.getResponseCode() == 200;
+            } finally {
+                c.disconnect();
+            }
+        } catch (IOException e) {
+            return false;
+        }
+    }
+
     static boolean hasKey(Context c) {
-        return youtube() || !Config.TMDB_KEY.trim().isEmpty();
+        return youtube() || !Prefs.tmdbKey(c).isEmpty();
     }
 
     /** With a YouTube key (config.properties "youtube_key"), the picks are what's trending on YouTube instead. */
@@ -302,7 +321,7 @@ final class Recs {
     void refreshIfStale() {
         if (!hasKey(context) || fetching) return;
         long now = System.currentTimeMillis();
-        long stamp = (Prefs.recent(app) ? 13 : 0) + Prefs.signature(app) * 131L + (Prefs.anyService(app) ? 7 : 0) + (Config.TMDB_KEY.hashCode() * 31L + REGION.hashCode()) * 31L + Config.YOUTUBE_KEY.hashCode();   // a new key or country refetches
+        long stamp = (Prefs.recent(app) ? 13 : 0) + Prefs.signature(app) * 131L + (Prefs.anyService(app) ? 7 : 0) + (Prefs.tmdbKey(app).hashCode() * 31L + REGION.hashCode()) * 31L + Config.YOUTUBE_KEY.hashCode();   // a new key or country refetches
         boolean newKey = stamp != keyStamp;
         long sinceFail = now - failedAt;    // negative = the clock went back: don't wait
         if (!newKey && failedAt != 0 && sinceFail >= 0 && sinceFail < 10 * 60_000L) return;
@@ -776,7 +795,7 @@ final class Recs {
     }
 
     private String readKey() {
-        String key = Config.TMDB_KEY.trim();
+        String key = Prefs.tmdbKey(app);
         return key.isEmpty() ? null : key;
     }
 
