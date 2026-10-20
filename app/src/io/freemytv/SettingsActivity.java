@@ -188,6 +188,10 @@ public class SettingsActivity extends Activity {
 
         void resume() {
             if (running) return;
+            if (w > 0 && wantLight() != light) {
+                light = !light;
+                initPaints();
+            }
             running = true;
             startedAt = SystemClock.uptimeMillis();
             lastNanos = 0;
@@ -215,23 +219,28 @@ public class SettingsActivity extends Activity {
             h = height;
             k = w / 1920f;
             scene.setSize(w, h);
-            title = Ui.text(Ui.displaySemibold, 50 * k, 0xFFFFFFFF);
+            light = wantLight();
+            initPaints();
+        }
+
+        private void initPaints() {
+            title = Ui.text(Ui.displaySemibold, 50 * k, fg(0xFFFFFFFF));
             title.setTextAlign(Paint.Align.CENTER);
-            subtitle = Ui.text(Ui.regular, 26 * k, 0x99FFFFFF);
+            subtitle = Ui.text(Ui.regular, 26 * k, fg(0x99FFFFFF));
             subtitle.setTextAlign(Paint.Align.CENTER);
-            version = Ui.text(Ui.regular, 22 * k, 0x66FFFFFF);
+            version = Ui.text(Ui.regular, 22 * k, fg(0x66FFFFFF));
             version.setTextAlign(Paint.Align.CENTER);
-            rowLabel = Ui.text(Ui.medium, 30 * k, 0xF2FFFFFF);
-            rowValue = Ui.text(Ui.regular, 28 * k, 0x8CFFFFFF);
+            rowLabel = Ui.text(Ui.medium, 30 * k, fg(0xF2FFFFFF));
+            rowValue = Ui.text(Ui.regular, 28 * k, fg(0x8CFFFFFF));
             rowValue.setTextAlign(Paint.Align.RIGHT);
-            rowSub = Ui.text(Ui.regular, 23 * k, 0x8CFFFFFF);
-            header = Ui.text(Ui.semibold, 21 * k, 0x73FFFFFF);
+            rowSub = Ui.text(Ui.regular, 23 * k, fg(0x8CFFFFFF));
+            header = Ui.text(Ui.semibold, 21 * k, fg(0x73FFFFFF));
             header.setLetterSpacing(0.06f);
-            cellLabel = Ui.text(Ui.regular, 25 * k, 0xD9FFFFFF);
-            cellValue = Ui.numbers(Ui.regular, 25 * k, 0xD9FFFFFF);
+            cellLabel = Ui.text(Ui.regular, 25 * k, fg(0xD9FFFFFF));
+            cellValue = Ui.numbers(Ui.regular, 25 * k, fg(0xD9FFFFFF));
             cellValue.setTextAlign(Paint.Align.RIGHT);
             warn = Ui.text(Ui.regular, 23 * k, AMBER);
-            notice = new TextPaint(Ui.text(Ui.regular, 23 * k, 0xB3FFFFFF));
+            notice = new TextPaint(Ui.text(Ui.regular, 23 * k, fg(0xB3FFFFFF)));
             spinner = new Paint(Paint.ANTI_ALIAS_FLAG);
             spinner.setStyle(Paint.Style.STROKE);
             spinner.setStrokeCap(Paint.Cap.ROUND);
@@ -240,6 +249,48 @@ public class SettingsActivity extends Activity {
             white.setColor(0xFFF5F5F7);
             shadow = new Paint(Paint.ANTI_ALIAS_FLAG);
             shadow.setMaskFilter(new BlurMaskFilter(22 * k, BlurMaskFilter.Blur.NORMAL));
+        }
+
+        /** Light look (the Theme setting, or daytime on Automatic): white text turns into near-black. */
+        private boolean light;
+
+        private int fg(int color) {
+            return light ? (color & 0xFF000000) | 0x1D1D1F : color;
+        }
+
+        private boolean wantLight() {
+            int t = HomeView.theme(getContext());
+            return t == HomeView.THEME_AUTO ? !HomeData.get(getContext()).isNight(System.currentTimeMillis()) : t == HomeView.THEME_LIGHT;
+        }
+
+        /** Background like Apple TV's Settings: a quiet gray gradient, dark or light. */
+        private void drawBackdrop(Canvas c) {
+            Paint bg = new Paint(Paint.DITHER_FLAG);
+            bg.setShader(new android.graphics.LinearGradient(0, 0, 0, h, light ? 0xFFF5F5F7 : 0xFF2C2C30,
+                    light ? 0xFFDCDCE2 : 0xFF141416, android.graphics.Shader.TileMode.CLAMP));
+            c.drawRect(0, 0, w, h, bg);
+        }
+
+        /** The app's icon, big, in a rounded square (Apple TV shows the section's icon on the left). */
+        private void drawIcon(Canvas c, float cx, float cy, float size) {
+            tmp.set(cx - size / 2, cy - size / 2, cx + size / 2, cy + size / 2);
+            float r = size * 0.22f;
+            tmp.offset(0, 14 * k);
+            shadow.setColor(light ? 0x33000000 : 0x66000000);
+            c.drawRoundRect(tmp, r, r, shadow);
+            tmp.offset(0, -14 * k);
+            Paint icon = new Paint(Paint.ANTI_ALIAS_FLAG);
+            icon.setShader(new android.graphics.LinearGradient(0, tmp.top, 0, tmp.bottom, 0xFF5E5CE6, 0xFF0A84FF,
+                    android.graphics.Shader.TileMode.CLAMP));
+            c.drawRoundRect(tmp, r, r, icon);
+            Symbols.draw(getContext(), c, "sparkles", cx, cy, size * 0.52f, 0xFFFFFFFF);
+        }
+
+        private String screenTitle() {
+            if (screen == RECS) return Ui.tr("Recomendações", "Recommendations");
+            if (screen == THEME) return Ui.tr("Tema", "Theme");
+            if (screen == HOME_CHOICE) return Ui.tr("Início", "Home Screen");
+            return Ui.tr("Ajustes do Início", "Home Settings");
         }
 
         private boolean busy() {
@@ -265,18 +316,15 @@ public class SettingsActivity extends Activity {
             }
             long up = SystemClock.uptimeMillis();
             float seconds = (up - startedAt) / 1000f;
-            if (up - lastSky >= 100) {
-                lastSky = up;
-                scene.advance(seconds);
-            }
-            scene.drawBackground(c);
+            lastSky = up;
+            drawBackdrop(c);
 
-            // On the left: big symbol, title, description.
+            // Apple TV's Settings: the title on top, the big icon on the left, the list on the right.
+            c.drawText(screenTitle(), 960 * k, 118 * k, title);
             float cx = 500 * k;
-            Symbols.draw(getContext(), c, "sparkles", cx, 400 * k, 150 * k, 0xEBFFFFFF);
-            c.drawText("Free My TV", cx, 612 * k, title);
-            c.drawText(Ui.tr("Início e tela de descanso da TV", "Your TV's home screen and screensaver"), cx, 660 * k, subtitle);
-            c.drawText(versionName(getContext()), cx, 704 * k, version);
+            drawIcon(c, cx, 470 * k, 300 * k);
+            c.drawText("Free My TV", cx, 690 * k, subtitle);
+            c.drawText(versionName(getContext()), cx, 732 * k, version);
 
             if (screen == MAIN) drawMain(c, seconds);
             else if (screen == RECS) drawRecsScreen(c);
@@ -296,30 +344,30 @@ public class SettingsActivity extends Activity {
                 float y = (LIST_TOP + i * (ROW_H + ROW_GAP)) * k;
                 rowRect.set(LIST_X * k, y, LIST_R * k, y + ROW_H * k);
                 float f = drawRowBackground(c, i);
-                int ink = blend(0xF2FFFFFF, INK, f);
+                int ink = blend(fg(0xF2FFFFFF), INK, f);
                 rowLabel.setColor(ink);
                 float base = rowRect.centerY() + Ui.halfCap(rowLabel);
                 c.drawText(labels[i], rowRect.left + 30 * k, base, rowLabel);
                 float right = rowRect.right - 30 * k;
                 if (i >= 3 || i == 2) {
                     if (i == 2) {
-                        rowValue.setColor(blend(0x8CFFFFFF, 0x8C1C1C1E, f));
+                        rowValue.setColor(blend(fg(0x8CFFFFFF), 0x8C1C1C1E, f));
                         float cw = Symbols.width(getContext(), "chevron_right", 22 * k);
                         c.drawText(values[i], right - cw - 14 * k, base, rowValue);
                     }
                     float cw = Symbols.width(getContext(), "chevron_right", 22 * k);
-                    Symbols.draw(getContext(), c, "chevron_right", right - cw / 2, rowRect.centerY(), 22 * k, blend(0x66FFFFFF, 0x991C1C1E, f));
+                    Symbols.draw(getContext(), c, "chevron_right", right - cw / 2, rowRect.centerY(), 22 * k, blend(fg(0x66FFFFFF), 0x991C1C1E, f));
                 } else if (i == 0 && working) {
                     // Switching: the current step in place of the value, with the spinning arc.
                     String text = busyText.isEmpty() ? Ui.tr("Começando…", "Starting…") : busyText;
-                    rowValue.setColor(blend(0xB3FFFFFF, 0xB31C1C1E, f));
+                    rowValue.setColor(blend(fg(0xB3FFFFFF), 0xB31C1C1E, f));
                     String shown = TextUtils.ellipsize(text, new TextPaint(rowValue), 470 * k, TextUtils.TruncateAt.END).toString();
                     c.drawText(shown, right, base, rowValue);
                     float sx = right - rowValue.measureText(shown) - 26 * k;
-                    spinner.setColor(blend(0xFFFFFFFF, INK, f));
+                    spinner.setColor(blend(fg(0xFFFFFFFF), INK, f));
                     Ui.spinner(c, sx, rowRect.centerY(), 12 * k, seconds * 1.3f, spinner);
                 } else {
-                    rowValue.setColor(blend(0x8CFFFFFF, 0x8C1C1C1E, f));
+                    rowValue.setColor(blend(fg(0x8CFFFFFF), 0x8C1C1C1E, f));
                     c.drawText(values[i], right, base, rowValue);
                 }
             }
@@ -381,10 +429,10 @@ public class SettingsActivity extends Activity {
         private float drawComparison(Canvas c, float y) {
             float x = LIST_X * k + 30 * k, colA = LIST_R * k - 220 * k, colB = LIST_R * k - 30 * k;
             c.drawText(Ui.tr("COMPARAÇÃO", "COMPARISON"), x, y, header);
-            cellValue.setColor(0x73FFFFFF);
+            cellValue.setColor(fg(0x73FFFFFF));
             c.drawText("Original", colA, y, cellValue);
             c.drawText("Free My TV", colB, y, cellValue);
-            cellValue.setColor(0xD9FFFFFF);
+            cellValue.setColor(fg(0xD9FFFFFF));
             JSONObject metrics = state.optJSONObject("metrics");
             JSONObject a = metrics == null ? null : metrics.optJSONObject(HomeMode.ORIGINAL);
             JSONObject b = metrics == null ? null : metrics.optJSONObject(HomeMode.FREE);
@@ -437,8 +485,6 @@ public class SettingsActivity extends Activity {
         /** Recommendations: genres, new releases only, any streaming service, and what OK on a card opens. */
         private void drawRecsScreen(Canvas c) {
             Context ctx = getContext();
-            Paint heading = Ui.text(Ui.displaySemibold, 34 * k, 0xFFFFFFFF);
-            c.drawText(Ui.tr("Recomendações", "Recommendations"), LIST_X * k + 30 * k, (LIST_TOP - 24) * k, heading);
             String yes = Ui.tr("Sim", "On"), no = Ui.tr("Não", "Off");
             String[] labels = {Ui.tr("Chave do TMDB", "TMDB key"), Ui.tr("Categorias", "Genres"),
                     Ui.tr("Só lançamentos", "New releases only"), Ui.tr("Em qualquer streaming", "On any streaming service"),
@@ -452,23 +498,21 @@ public class SettingsActivity extends Activity {
                 float y = (LIST_TOP + 20 + i * (ROW_H + ROW_GAP)) * k;
                 rowRect.set(LIST_X * k, y, LIST_R * k, y + ROW_H * k);
                 float f = drawRowBackground(c, i);
-                rowLabel.setColor(blend(0xF2FFFFFF, INK, f));
+                rowLabel.setColor(blend(fg(0xF2FFFFFF), INK, f));
                 float base = rowRect.centerY() + Ui.halfCap(rowLabel);
                 c.drawText(labels[i], rowRect.left + 30 * k, base, rowLabel);
-                rowValue.setColor(blend(0x8CFFFFFF, 0x8C1C1C1E, f));
+                rowValue.setColor(blend(fg(0x8CFFFFFF), 0x8C1C1C1E, f));
                 float room = rowRect.width() - 60 * k - rowLabel.measureText(labels[i]) - 40 * k;
                 c.drawText(TextUtils.ellipsize(values[i], new TextPaint(rowValue), room, TextUtils.TruncateAt.END).toString(),
                         rowRect.right - 30 * k, base, rowValue);
             }
-            Paint hint = Ui.text(Ui.regular, 23 * k, 0x8CFFFFFF);
+            Paint hint = Ui.text(Ui.regular, 23 * k, fg(0x8CFFFFFF));
             c.drawText(Ui.tr("As mudanças aparecem quando você voltar ao Início.", "Changes show up when you go back home."),
                     LIST_X * k + 30 * k, (LIST_TOP + 20 + 5 * (ROW_H + ROW_GAP) + 40) * k, hint);
         }
 
         /** Theme: a list like Recommendations, with a check on the current one. */
         private void drawThemeScreen(Canvas c) {
-            Paint heading = Ui.text(Ui.displaySemibold, 34 * k, 0xFFFFFFFF);
-            c.drawText(Ui.tr("Tema", "Theme"), LIST_X * k + 30 * k, (LIST_TOP - 24) * k, heading);
             String[] names = themes();
             String[] notes = {Ui.tr("Claro de dia, escuro depois do pôr do sol", "Light by day, dark after sunset"),
                     Ui.tr("Sempre claro", "Always light"), Ui.tr("Sempre escuro", "Always dark")};
@@ -477,14 +521,14 @@ public class SettingsActivity extends Activity {
                 float y = (LIST_TOP + 20 + i * (ROW_H + ROW_GAP)) * k;
                 rowRect.set(LIST_X * k, y, LIST_R * k, y + ROW_H * k);
                 float f = drawRowBackground(c, i);
-                rowLabel.setColor(blend(0xF2FFFFFF, INK, f));
+                rowLabel.setColor(blend(fg(0xF2FFFFFF), INK, f));
                 float base = rowRect.centerY() + Ui.halfCap(rowLabel);
                 c.drawText(names[i], rowRect.left + 30 * k, base, rowLabel);
-                rowValue.setColor(blend(0x8CFFFFFF, 0x8C1C1C1E, f));
+                rowValue.setColor(blend(fg(0x8CFFFFFF), 0x8C1C1C1E, f));
                 float cw = Symbols.width(getContext(), "check", 24 * k);
                 c.drawText(notes[i], rowRect.right - 30 * k - cw - 24 * k, base, rowValue);
                 if (i == current) {
-                    Symbols.draw(getContext(), c, "check", rowRect.right - 30 * k - cw / 2, rowRect.centerY(), 24 * k, blend(0xFFFFFFFF, INK, f));
+                    Symbols.draw(getContext(), c, "check", rowRect.right - 30 * k - cw / 2, rowRect.centerY(), 24 * k, blend(fg(0xFFFFFFFF), INK, f));
                 }
             }
         }
@@ -523,9 +567,9 @@ public class SettingsActivity extends Activity {
             shadow.setColor(0x80000000);
             c.drawRoundRect(tmp, 32 * k, 32 * k, shadow);
             Paint panel = new Paint(Paint.ANTI_ALIAS_FLAG);
-            panel.setColor(0xF22C2C2E);
+            panel.setColor(light ? 0xFAE6E6EB : 0xF22C2C2E);
             c.drawRoundRect(tmp, 32 * k, 32 * k, panel);
-            Paint heading = Ui.text(Ui.displaySemibold, 34 * k, 0xFFFFFFFF);
+            Paint heading = Ui.text(Ui.displaySemibold, 34 * k, fg(0xFFFFFFFF));
             c.drawText(popupTitle(), left + pad * k + 10 * k, top + 62 * k, heading);
             for (int i = 0; i < options.length; i++) {
                 popupPop[i].target = i == popupFocus ? 1 : 0;
@@ -538,15 +582,15 @@ public class SettingsActivity extends Activity {
                     white.setAlpha(Math.round(255 * f));
                     c.drawRoundRect(rowRect, 16 * k, 16 * k, white);
                 }
-                rowLabel.setColor(blend(0xF2FFFFFF, INK, f));
+                rowLabel.setColor(blend(fg(0xF2FFFFFF), INK, f));
                 c.drawText(options[i], rowRect.left + 26 * k, rowRect.centerY() + Ui.halfCap(rowLabel), rowLabel);
                 if (popupChecked(i)) {
                     float cw = Symbols.width(getContext(), "check", 24 * k);
-                    Symbols.draw(getContext(), c, "check", rowRect.right - 26 * k - cw / 2, rowRect.centerY(), 24 * k, blend(0xFFFFFFFF, INK, f));
+                    Symbols.draw(getContext(), c, "check", rowRect.right - 26 * k - cw / 2, rowRect.centerY(), 24 * k, blend(fg(0xFFFFFFFF), INK, f));
                 }
             }
             if (grid) {
-                Paint hint = Ui.text(Ui.regular, 22 * k, 0x8CFFFFFF);
+                Paint hint = Ui.text(Ui.regular, 22 * k, fg(0x8CFFFFFF));
                 c.drawText(Ui.tr("OK marca ou desmarca · Voltar fecha", "OK ticks or unticks · Back closes"),
                         left + pad * k + 10 * k, top + (ph - 22) * k, hint);
             }
@@ -559,8 +603,6 @@ public class SettingsActivity extends Activity {
         }
 
         private void drawChoice(Canvas c) {
-            Paint heading = Ui.text(Ui.displaySemibold, 34 * k, 0xFFFFFFFF);
-            c.drawText(Ui.tr("Início", "Home Screen"), LIST_X * k + 30 * k, (LIST_TOP - 24) * k, heading);
             String[][] options = {{"Free My TV", Ui.tr("Sem anúncios, com a tela de descanso nova", "No ads, with the new screensaver")},
                     {"Original", Ui.tr("O Início de fábrica da TV", "The TV's factory home screen")}};
             int current = freeActive() ? 0 : 1;
@@ -568,16 +610,16 @@ public class SettingsActivity extends Activity {
                 float y = (LIST_TOP + 20 + i * (CHOICE_H + ROW_GAP)) * k;
                 rowRect.set(LIST_X * k, y, LIST_R * k, y + CHOICE_H * k);
                 float f = drawRowBackground(c, i);
-                rowLabel.setColor(blend(0xF2FFFFFF, INK, f));
-                rowSub.setColor(blend(0x8CFFFFFF, 0x991C1C1E, f));
+                rowLabel.setColor(blend(fg(0xF2FFFFFF), INK, f));
+                rowSub.setColor(blend(fg(0x8CFFFFFF), 0x991C1C1E, f));
                 c.drawText(options[i][0], rowRect.left + 30 * k, rowRect.top + 44 * k, rowLabel);
                 c.drawText(options[i][1], rowRect.left + 30 * k, rowRect.top + 80 * k, rowSub);
                 if (i == current) {
                     float cw = Symbols.width(getContext(), "check", 26 * k);
-                    Symbols.draw(getContext(), c, "check", rowRect.right - 30 * k - cw / 2, rowRect.centerY(), 26 * k, blend(0xFFFFFFFF, INK, f));
+                    Symbols.draw(getContext(), c, "check", rowRect.right - 30 * k - cw / 2, rowRect.centerY(), 26 * k, blend(fg(0xFFFFFFFF), INK, f));
                 }
             }
-            Paint hint = Ui.text(Ui.regular, 23 * k, 0x8CFFFFFF);
+            Paint hint = Ui.text(Ui.regular, 23 * k, fg(0x8CFFFFFF));
             c.drawText(Ui.tr("A troca leva uns segundos e a tela pisca nas medições.",
                     "Switching takes a few seconds; the screen blinks while it measures."), LIST_X * k + 30 * k,
                     (LIST_TOP + 20 + 2 * (CHOICE_H + ROW_GAP) + 40) * k, hint);
