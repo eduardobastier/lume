@@ -1003,7 +1003,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         if (showInfo()) {
             info = 26 * k + capsuleText.measureText(clockText);
             HomeData.Weather wx = data.weather;
-            if (!Double.isNaN(wx.temp)) {
+            if (!Double.isNaN(wx.temp) && Prefs.showWeather(getContext())) {
                 info += 22 * k + Symbols.width(getContext(), Symbols.weather(wx.code, wx.isDay), 24 * k) + 8 * k
                         + capsuleText.measureText(HomeData.degrees(wx.temp));
             }
@@ -1345,7 +1345,9 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         if (top >= 0) drawDrawerTile(c, top);
         // The weather card is recorded once and replayed while only the focus moves in the drawer (redrawing its
         // glass and text on every frame of a focus change made the drawer stutter on the TV).
-        if (c.isHardwareAccelerated()) {
+        if (!Prefs.showWeather(getContext())) {
+            // No weather: nothing in its place.
+        } else if (c.isHardwareAccelerated()) {
             if (weatherStale || weatherNode.getWidth() != getWidth()) {
                 weatherNode.setPosition(0, 0, getWidth(), getHeight());
                 Canvas rc = weatherNode.beginRecording();
@@ -2174,7 +2176,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
     /** Top center: the weather now, in one line (icon, temperature and sky). */
     private void drawWeatherSummary(Canvas c) {
         HomeData.Weather wx = data.weather;
-        if (Double.isNaN(wx.temp) || lWx == null) return;
+        if (Double.isNaN(wx.temp) || lWx == null || !Prefs.showWeather(getContext())) return;
         lWx.setColor(tone(L_INK, WHITE));
         String now = HomeData.degrees(wx.temp) + "  " + HomeData.condition(wx.code, wx.isDay);
         String symbol = Symbols.weather(wx.code, wx.isDay);

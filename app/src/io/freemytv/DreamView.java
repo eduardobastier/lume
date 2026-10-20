@@ -504,7 +504,7 @@ final class DreamView extends View implements Choreographer.FrameCallback, HomeD
             float right = RIGHT * k;
             float x = right;
             HomeData.Weather wx = data.weather;
-            if (!Double.isNaN(wx.temp)) {
+            if (!Double.isNaN(wx.temp) && Prefs.showWeather(getContext())) {
                 String temp = HomeData.degrees(wx.temp);
                 float tw = cornerDate.measureText(temp);
                 c.drawText(temp, x - tw, DATE_BASE * k, cornerDate);
@@ -751,7 +751,7 @@ final class DreamView extends View implements Choreographer.FrameCallback, HomeD
 
         // Weather: symbol, temperature, high and low, centered under the clock.
         HomeData.Weather wx = data.weather;
-        if (!Double.isNaN(wx.temp)) {
+        if (!Double.isNaN(wx.temp) && Prefs.showWeather(getContext())) {
             float base = clockBase + 76 * k;
             String symbol = Symbols.weather(wx.code, wx.isDay);
             String now = HomeData.degrees(wx.temp);

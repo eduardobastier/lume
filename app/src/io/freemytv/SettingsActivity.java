@@ -96,7 +96,44 @@ public class SettingsActivity extends Activity {
      * Recommendations → TMDB key: typed with the TV's keyboard, checked with TMDB before it's kept. Empty = go back to
      * the key built into the app (if any).
      */
+    interface TextDone { void done(String text); }
+
     void askTmdbKey() {
+        askText(Ui.tr("Chave do TMDB", "TMDB key"),
+                Ui.tr("Grátis em themoviedb.org → Ajustes → API. Deixe vazio para usar a chave do app.",
+                        "Free at themoviedb.org → Settings → API. Leave empty to use the app's key."),
+                Ui.tr("Chave da API (v3) ou token de leitura", "API key (v3) or read access token"),
+                Prefs.typedTmdbKey(this) ? Prefs.tmdbKey(this) : "", true, this::saveTmdbKey);
+    }
+
+    /** Weather → City: typed with the TV's keyboard and looked up (Open-Meteo) before it's kept. */
+    void askCity() {
+        askText(Ui.tr("Cidade da previsão", "Weather city"),
+                Ui.tr("Digite o nome da cidade, por exemplo: Quissamã, RJ.", "Type the city's name, e.g. Lisbon."),
+                Ui.tr("Nome da cidade", "City name"), Prefs.weatherCityName(this), false, this::saveCity);
+    }
+
+    private void saveCity(final String name) {
+        if (name.isEmpty()) return;
+        final android.content.Context app = getApplicationContext();
+        new Thread(() -> {
+            String[] found = HomeData.findCity(name.replace(",", " "));
+            if (found != null) {
+                Prefs.setWeatherCity(app, found[0], found[1], found[2]);
+                HomeData.get(app).relocate();
+            }
+            new Handler(Looper.getMainLooper()).post(() -> {
+                android.widget.Toast.makeText(app, found != null
+                        ? Ui.tr("Previsão de ", "Weather for ") + found[3] + "."
+                        : Ui.tr("Não achei essa cidade. Confira o nome e tente de novo.", "Couldn't find that city. Check the name and try again."),
+                        android.widget.Toast.LENGTH_LONG).show();
+                view.invalidate();
+            });
+        }).start();
+    }
+
+    /** A text field in our own panel (the same look as the popups), with the TV's keyboard. */
+    private void askText(String titleText, String messageText, String hint, String initial, boolean secret, TextDone done) {
         final boolean light = view.isLight();
         final int ink = light ? 0xFF1D1D1F : 0xFFF5F5F7, dim = light ? 0x991D1D1F : 0x99F5F5F7;
         float dp = getResources().getDisplayMetrics().density;
@@ -105,13 +142,12 @@ public class SettingsActivity extends Activity {
         int pad = Math.round(28 * dp);
         box.setPadding(pad, pad, pad, Math.round(8 * dp));
         android.widget.TextView title = new android.widget.TextView(this);
-        title.setText(Ui.tr("Chave do TMDB", "TMDB key"));
+        title.setText(titleText);
         title.setTextColor(ink);
         title.setTextSize(24);
         title.setTypeface(Ui.semibold);
         android.widget.TextView message = new android.widget.TextView(this);
-        message.setText(Ui.tr("Grátis em themoviedb.org → Ajustes → API. Deixe vazio para usar a chave do app.",
-                "Free at themoviedb.org → Settings → API. Leave empty to use the app's key."));
+        message.setText(messageText);
         message.setTextColor(dim);
         message.setTextSize(15);
         message.setTypeface(Ui.regular);
@@ -121,9 +157,10 @@ public class SettingsActivity extends Activity {
         field.setTextColor(ink);
         field.setHintTextColor(dim);
         field.setTypeface(Ui.regular);
-        field.setHint(Ui.tr("Chave da API (v3) ou token de leitura", "API key (v3) or read access token"));
-        field.setText(Prefs.typedTmdbKey(this) ? Prefs.tmdbKey(this) : "");
-        field.setInputType(android.text.InputType.TYPE_CLASS_TEXT | android.text.InputType.TYPE_TEXT_VARIATION_VISIBLE_PASSWORD);
+        field.setHint(hint);
+        field.setText(initial);
+        field.setInputType(android.text.InputType.TYPE_CLASS_TEXT | (secret ? android.text.InputType.TYPE_TEXT_VARIATION_VISIBLE_PASSWORD
+                : android.text.InputType.TYPE_TEXT_FLAG_CAP_WORDS));
         field.setTypeface(Ui.regular);   // after setInputType, which switches to monospace
         field.setBackgroundTintList(android.content.res.ColorStateList.valueOf(0xFF0A84FF));
         box.addView(title);
@@ -132,7 +169,7 @@ public class SettingsActivity extends Activity {
         // Our own colors (the system's dialog stays dark on this TV): the same panel as the genre popup.
         final android.app.AlertDialog dialog = new android.app.AlertDialog.Builder(this)
                 .setView(box)
-                .setPositiveButton(Ui.tr("Salvar", "Save"), (d, w) -> saveTmdbKey(field.getText().toString().trim()))
+                .setPositiveButton(Ui.tr("Salvar", "Save"), (d, w) -> done.done(field.getText().toString().trim()))
                 .setNegativeButton(Ui.tr("Cancelar", "Cancel"), null)
                 .create();
         android.graphics.drawable.GradientDrawable panel = new android.graphics.drawable.GradientDrawable();
@@ -181,12 +218,12 @@ public class SettingsActivity extends Activity {
     }
 
     static final class SettingsView extends View implements Choreographer.FrameCallback {
-        private static final int MAIN = 0, HOME_CHOICE = 1, RECS = 2, THEME = 3, SAVER = 4, MAIN_ROWS = 7;
+        private static final int MAIN = 0, HOME_CHOICE = 1, RECS = 2, THEME = 3, SAVER = 4, WEATHER = 5, MAIN_ROWS = 8;
         /** How long the TV waits before the screensaver (Android's screen-off timeout), in minutes. */
         private static final int[] SAVER_MINUTES = {1, 2, 5, 10, 15, 30, 60};
         /** The popup over the list: none, the theme, the genres (several at once) or what OK on a card opens. */
         private static final int NO_POPUP = 0, THEME_POPUP = 1, GENRE_POPUP = 2, ACTION_POPUP = 3, LIVE_POPUP = 4, SAVER_POPUP = 5,
-                YES_NO_POPUP = 6;
+                YES_NO_POPUP = 6, PLACE_POPUP = 7;
         /** The on/off choice the Yes/No popup is for: its Prefs key and title. */
         private String yesNoKey = "", yesNoTitle = "";
         /** Live TV choices: [value, name], built when the popup opens (the TV's inputs and installed apps). */
@@ -200,7 +237,7 @@ public class SettingsActivity extends Activity {
         private final Scene scene = new Scene();
         private Click click;
         private final Handler handler = new Handler(Looper.getMainLooper());
-        private final Spring[] pop = new Spring[8];
+        private final Spring[] pop = new Spring[10];
         private final RectF tmp = new RectF(), rowRect = new RectF();
         private JSONObject state = new JSONObject(), recs = new JSONObject();
         private boolean hasKey;
@@ -350,6 +387,7 @@ public class SettingsActivity extends Activity {
             if (screen == THEME) return Ui.tr("Tema", "Theme");
             if (screen == HOME_CHOICE) return Ui.tr("Início", "Home Screen");
             if (screen == SAVER) return Ui.tr("Tela de Descanso", "Screensaver");
+            if (screen == WEATHER) return Ui.tr("Previsão do Tempo", "Weather");
             return Ui.tr("Ajustes do Início", "Home Settings");
         }
 
@@ -362,7 +400,7 @@ public class SettingsActivity extends Activity {
         }
 
         private int rowCount() {
-            return screen == MAIN ? MAIN_ROWS : screen == RECS ? 5 : screen == THEME ? 3 : screen == SAVER ? 2 : 2;
+            return screen == MAIN ? MAIN_ROWS : screen == RECS ? 5 : screen == THEME ? 3 : screen == WEATHER ? 3 : 2;
         }
 
         @Override protected void onDraw(Canvas c) {
@@ -390,6 +428,7 @@ public class SettingsActivity extends Activity {
             else if (screen == RECS) drawRecsScreen(c);
             else if (screen == THEME) drawThemeScreen(c);
             else if (screen == SAVER) drawSaverScreen(c);
+            else if (screen == WEATHER) drawWeatherScreen(c);
             else drawChoice(c);
             if (popup != NO_POPUP) drawPopup(c, dt);
         }
@@ -399,9 +438,9 @@ public class SettingsActivity extends Activity {
             String busyText = state.optString("busy");
             String mode = freeActive() ? "Free My TV" : Ui.tr("Original", "Original");
             String[] labels = {Ui.tr("Início", "Home Screen"), Ui.tr("Tela de Descanso", "Screensaver"), Ui.tr("Tema", "Theme"),
-                    Ui.tr("TV ao Vivo", "Live TV"), Ui.tr("Sons ao navegar", "Navigation sounds"),
+                    Ui.tr("Previsão do tempo", "Weather"), Ui.tr("TV ao Vivo", "Live TV"), Ui.tr("Sons ao navegar", "Navigation sounds"),
                     Ui.tr("Recomendações", "Recommendations"), Ui.tr("Ajustes da TV", "TV Settings")};
-            String[] values = {working ? "" : mode, saverName(), themes()[HomeView.theme(getContext())],
+            String[] values = {working ? "" : mode, saverName(), themes()[HomeView.theme(getContext())], weatherName(),
                     liveName(), Prefs.sounds(getContext()) ? Ui.tr("Sim", "On") : Ui.tr("Não", "Off"), "", ""};
             for (int i = 0; i < MAIN_ROWS; i++) {
                 float y = (LIST_TOP + i * (ROW_H + ROW_GAP)) * k;
@@ -437,8 +476,7 @@ public class SettingsActivity extends Activity {
                 y += 46 * k;
             }
             // Like Apple TV's Settings: the list, and below it only the recommendations status and the notices.
-            y = drawRecs(c, y);
-            drawNotices(c, y + 40 * k);
+            drawRecs(c, y);
         }
 
         /** Home screen picks: status, and the credit TMDB asks for. */
@@ -478,21 +516,6 @@ public class SettingsActivity extends Activity {
                 rowRect.set(tmp);
             }
             return f;
-        }
-
-        private void drawNotices(Canvas c, float y) {
-            float x = LIST_X * k + 30 * k;
-            c.drawText(Ui.tr("AVISOS", "NOTICES"), x, y, header);
-            JSONArray notices = state.optJSONArray("notices");
-            int shown = 0;
-            for (int i = 0; notices != null && i < notices.length() && shown < 2; i++) {
-                JSONObject o = notices.optJSONObject(i);
-                if (o == null) continue;
-                String line = ago(o.optLong("at")) + " · " + o.optString("text");
-                c.drawText(TextUtils.ellipsize(line, notice, 790 * k, TextUtils.TruncateAt.END).toString(), x, y + (42 + 38 * shown) * k, notice);
-                shown++;
-            }
-            if (shown == 0) c.drawText(Ui.tr("Nenhum ainda.", "None yet."), x, y + 42 * k, notice);
         }
 
         /** Home screen choice: Free My TV or the original, with a check on the one in use. */
@@ -576,6 +599,37 @@ public class SettingsActivity extends Activity {
                             "The TV turns off first (TV Settings → Power): the screensaver won't show.")
                     : Ui.tr("Vale para a TV toda, como nos Ajustes da TV.", "Applies to the whole TV, like TV Settings.");
             c.drawText(note, LIST_X * k + 30 * k, (LIST_TOP + 20 + 2 * (ROW_H + ROW_GAP) + 40) * k, hint);
+        }
+
+        private String weatherName() {
+            Context c = getContext();
+            if (!Prefs.showWeather(c)) return Ui.tr("Desligada", "Off");
+            String city = HomeData.get(c).city;
+            return city.isEmpty() ? Ui.tr("Ligada", "On") : city;
+        }
+
+        /** Weather: show it or not, where it's for (the internet connection's location or a typed city). */
+        private void drawWeatherScreen(Canvas c) {
+            Context ctx = getContext();
+            String[] labels = {Ui.tr("Mostrar previsão", "Show weather"), Ui.tr("Localização", "Location"),
+                    Ui.tr("Cidade", "City")};
+            String city = Prefs.weatherCityName(ctx);
+            String[] values = {Prefs.showWeather(ctx) ? Ui.tr("Sim", "On") : Ui.tr("Não", "Off"),
+                    Prefs.manualWeather(ctx) ? Ui.tr("Cidade escolhida", "Chosen city") : Ui.tr("Automática (internet)", "Automatic (internet)"),
+                    city.isEmpty() ? Ui.tr("Nenhuma", "None") : city};
+            for (int i = 0; i < 3; i++) {
+                float y = (LIST_TOP + 20 + i * (ROW_H + ROW_GAP)) * k;
+                rowRect.set(LIST_X * k, y, LIST_R * k, y + ROW_H * k);
+                float f = drawRowBackground(c, i);
+                rowLabel.setColor(blend(fg(0xF2FFFFFF), INK, f));
+                float base = rowRect.centerY() + Ui.halfCap(rowLabel);
+                c.drawText(labels[i], rowRect.left + 30 * k, base, rowLabel);
+                valueAndChevron(c, values[i], base, f);
+            }
+            Paint hint = Ui.text(Ui.regular, 23 * k, fg(0x8CFFFFFF));
+            String now = HomeData.get(ctx).city;
+            c.drawText(Ui.tr("Agora: ", "Now: ") + (now.isEmpty() ? "—" : now) + Ui.tr(" · o pôr do sol daqui troca o tema", " · its sunset switches the theme"),
+                    LIST_X * k + 30 * k, (LIST_TOP + 20 + 3 * (ROW_H + ROW_GAP) + 40) * k, hint);
         }
 
         /** Saves the wait with the TV's own ADB (this app may not write system settings itself). */
@@ -665,6 +719,12 @@ public class SettingsActivity extends Activity {
                         + (mine.isEmpty() ? "none now" : String.join(", ", mine)) + "). Known apps: "
                         + String.join(", ", Recs.knownServices(getContext(), false)) + ".");
             }
+            if (yesNoKey.equals("weather")) {
+                return Ui.tr("Sim: o tempo no topo do Início, na gaveta e na tela de descanso.\n"
+                        + "Não: some de todos esses lugares.",
+                        "On: the weather on top of the home screen, in the drawer and on the screensaver.\n"
+                        + "Off: it's gone from all of them.");
+            }
             if (yesNoKey.equals("recs_recent")) {
                 return Ui.tr("Sim: só filmes dos últimos 4 meses e séries que estrearam nos últimos 6.\n"
                         + "Não: tudo o que está em alta, incluindo títulos antigos e temporadas novas.",
@@ -679,6 +739,7 @@ public class SettingsActivity extends Activity {
             if (popup == LIVE_POPUP) return Ui.tr("TV ao Vivo abre", "Live TV opens");
             if (popup == SAVER_POPUP) return Ui.tr("Começar após", "Start after");
             if (popup == YES_NO_POPUP) return yesNoTitle;
+            if (popup == PLACE_POPUP) return Ui.tr("Localização", "Location");
             return popup == THEME_POPUP ? Ui.tr("Tema", "Theme") : popup == GENRE_POPUP ? Ui.tr("Categorias", "Genres")
                     : Ui.tr("Ao apertar OK no card", "OK on a card");
         }
@@ -687,6 +748,8 @@ public class SettingsActivity extends Activity {
             if (popup == THEME_POPUP) return themes();
             if (popup == ACTION_POPUP) return actions();
             if (popup == YES_NO_POPUP) return new String[] {Ui.tr("Sim", "On"), Ui.tr("Não", "Off")};
+            if (popup == PLACE_POPUP) return new String[] {Ui.tr("Automática (pela internet)", "Automatic (internet)"),
+                    Ui.tr("Cidade escolhida", "Chosen city")};
             if (popup == SAVER_POPUP) {
                 String[] out = new String[SAVER_MINUTES.length];
                 for (int i = 0; i < out.length; i++) out[i] = minutes(SAVER_MINUTES[i]);
@@ -707,6 +770,7 @@ public class SettingsActivity extends Activity {
             if (popup == ACTION_POPUP) return actionIndex() == i;
             if (popup == SAVER_POPUP) return SAVER_MINUTES[i] == saverMinutes();
             if (popup == YES_NO_POPUP) return yesNo() == (i == 0);
+            if (popup == PLACE_POPUP) return Prefs.manualWeather(getContext()) == (i == 1);
             if (popup == LIVE_POPUP) return liveChoices.get(i)[0].equals(Prefs.liveTv(getContext()));
             return Prefs.genres(getContext()).contains(Prefs.GENRES[i][0]);
         }
@@ -774,6 +838,7 @@ public class SettingsActivity extends Activity {
         private boolean yesNo() {
             Context c = getContext();
             if (yesNoKey.equals("sounds")) return Prefs.sounds(c);
+            if (yesNoKey.equals("weather")) return Prefs.showWeather(c);
             if (yesNoKey.equals("recs_recent")) return Prefs.recent(c);
             return Prefs.anyService(c);
         }
@@ -787,7 +852,7 @@ public class SettingsActivity extends Activity {
         private void openPopup(int kind) {
             popup = kind;
             popupFocus = kind == THEME_POPUP ? HomeView.theme(getContext()) : kind == ACTION_POPUP ? actionIndex() : 0;
-            if (kind == LIVE_POPUP || kind == SAVER_POPUP || kind == YES_NO_POPUP) {
+            if (kind == LIVE_POPUP || kind == SAVER_POPUP || kind == YES_NO_POPUP || kind == PLACE_POPUP) {
                 for (int i = 0; i < popupOptions().length; i++) if (popupChecked(i)) popupFocus = i;
             }
             for (Spring s : popupPop) s.snap(0);
@@ -821,14 +886,6 @@ public class SettingsActivity extends Activity {
             int ba = b >>> 24, br = (b >> 16) & 255, bg = (b >> 8) & 255, bb = b & 255;
             return (Math.round(aa + (ba - aa) * f) << 24) | (Math.round(ar + (br - ar) * f) << 16)
                     | (Math.round(ag + (bg - ag) * f) << 8) | Math.round(ab + (bb - ab) * f);
-        }
-
-        private static String ago(long at) {
-            long minutes = Math.max(0, (System.currentTimeMillis() - at) / 60_000);
-            if (minutes < 1) return Ui.tr("agora", "now");
-            if (minutes < 60) return Ui.tr("há " + minutes + " min", minutes + " min ago");
-            if (minutes < 48 * 60) return Ui.tr("há " + (minutes / 60) + " h", (minutes / 60) + " h ago");
-            return Ui.tr("há " + (minutes / 1440) + " dias", (minutes / 1440) + " days ago");
         }
 
         private static String versionName(Context c) {
@@ -879,7 +936,7 @@ public class SettingsActivity extends Activity {
                         if (e.getRepeatCount() == 0) backDown = true;
                     } else {
                         if (backDown && !e.isCanceled()) {
-                            focus = screen == RECS ? 5 : screen == THEME ? 2 : screen == SAVER ? 1 : 0;
+                            focus = screen == RECS ? 6 : screen == THEME ? 2 : screen == SAVER ? 1 : screen == WEATHER ? 3 : 0;
                             screen = MAIN;
                         }
                         backDown = false;
@@ -930,6 +987,17 @@ public class SettingsActivity extends Activity {
                         } else if (popup == YES_NO_POPUP) {
                             Prefs.set(c, yesNoKey, popupFocus == 0);
                             popup = NO_POPUP;
+                        } else if (popup == PLACE_POPUP) {
+                            popup = NO_POPUP;
+                            if (popupFocus == 0) {
+                                Prefs.set(c, "weather_manual", false);
+                                HomeData.get(c).relocate();
+                            } else if (Prefs.weatherCity(c) == null) {
+                                activity.askCity();   // no city yet: ask for one
+                            } else {
+                                Prefs.set(c, "weather_manual", true);
+                                HomeData.get(c).relocate();
+                            }
                         } else if (popup == SAVER_POPUP) {
                             setSaverMinutes(SAVER_MINUTES[popupFocus]);
                             popup = NO_POPUP;
@@ -978,6 +1046,12 @@ public class SettingsActivity extends Activity {
                 }
                 screen = MAIN;
                 focus = 0;
+            } else if (screen == WEATHER) {
+                if (focus == 0) openYesNo("weather", Ui.tr("Mostrar previsão", "Show weather"));
+                else if (focus == 1) openPopup(PLACE_POPUP);
+                else activity.askCity();
+                invalidate();
+                return;
             } else if (screen == SAVER) {
                 if (focus == 0) {
                     pause();
@@ -1006,11 +1080,14 @@ public class SettingsActivity extends Activity {
                 screen = THEME;
                 focus = HomeView.theme(c);
             } else if (focus == 3) {
+                screen = WEATHER;
+                focus = 0;
+            } else if (focus == 4) {
                 liveChoices = liveChoices();
                 openPopup(LIVE_POPUP);
-            } else if (focus == 4) {
-                openYesNo("sounds", Ui.tr("Sons ao navegar", "Navigation sounds"));
             } else if (focus == 5) {
+                openYesNo("sounds", Ui.tr("Sons ao navegar", "Navigation sounds"));
+            } else if (focus == 6) {
                 screen = RECS;
                 focus = 0;
             } else {

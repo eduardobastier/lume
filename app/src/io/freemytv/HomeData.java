@@ -168,30 +168,19 @@ final class HomeData {
     }
 
     /**
-     * Finds where the TV is, at most every 6 hours: the TV's last known location (if it has one and the app may read
-     * it), else the internet connection's location (ipwho.is, then ipapi.co). Keeps the last one found, or the
-     * config.properties city, when neither answers.
+     * Finds where the TV is, at most every 6 hours: the city chosen in Home Settings, else the internet connection's
+     * location (ipwho.is, then ipapi.co). Keeps the last one found, or the config.properties city, when neither answers.
      */
     private void locate() {
         long now = System.currentTimeMillis();
         if (locatedAt != 0 && now - locatedAt < LOCATE_EVERY && now >= locatedAt) return;
         String la = null, lo = null, name = null;
-        try {
-            android.location.LocationManager lm = (android.location.LocationManager) context.getSystemService(Context.LOCATION_SERVICE);
-            if (lm != null && context.checkSelfPermission(android.Manifest.permission.ACCESS_COARSE_LOCATION)
-                    == android.content.pm.PackageManager.PERMISSION_GRANTED) {
-                android.location.Location best = null;
-                for (String provider : lm.getProviders(true)) {
-                    android.location.Location l = lm.getLastKnownLocation(provider);
-                    if (l != null && (best == null || l.getTime() > best.getTime())) best = l;
-                }
-                if (best != null) {
-                    la = String.format(Locale.US, "%.4f", best.getLatitude());
-                    lo = String.format(Locale.US, "%.4f", best.getLongitude());
-                }
-            }
-        } catch (RuntimeException e) {
-            AppLog.w("tv location: " + e.getMessage());
+        // A city chosen in Home Settings wins; otherwise the internet connection's location.
+        String[] chosen = Prefs.weatherCity(context);
+        if (chosen != null) {
+            la = chosen[1];
+            lo = chosen[2];
+            name = chosen[0];
         }
         if (la == null) {
             for (String url : new String[] {"https://ipwho.is/", "https://ipapi.co/json/"}) {
@@ -224,6 +213,31 @@ final class HomeData {
         String mine = Config.CITY.trim();
         String plain = java.text.Normalizer.normalize(mine, java.text.Normalizer.Form.NFD).replaceAll("\\p{M}", "");
         return !mine.isEmpty() && plain.equalsIgnoreCase(name) ? mine : name;
+    }
+
+    /** The place changed in Home Settings: find it again and fetch its forecast now. */
+    void relocate() {
+        locatedAt = 0;
+        weatherAt = 0;
+        refreshIfStale();
+    }
+
+    /** A city name → {name, latitude, longitude} (Open-Meteo's geocoding), or null. Network: not on the UI thread. */
+    static String[] findCity(String query) {
+        try {
+            String url = "https://geocoding-api.open-meteo.com/v1/search?count=1&language=" + (Ui.en ? "en" : "pt")
+                    + "&name=" + java.net.URLEncoder.encode(query, "UTF-8");
+            JSONArray results = new JSONObject(get(url)).optJSONArray("results");
+            if (results == null || results.length() == 0) return null;
+            JSONObject o = results.getJSONObject(0);
+            String admin = o.optString("admin1", "");
+            String name = o.optString("name") + (admin.isEmpty() ? "" : " · " + admin);
+            return new String[] {o.optString("name"), String.format(Locale.US, "%.4f", o.optDouble("latitude")),
+                    String.format(Locale.US, "%.4f", o.optDouble("longitude")), name};
+        } catch (Exception e) {
+            AppLog.w("city search: " + e.getMessage());
+            return null;
+        }
     }
 
     private void notifyListeners() {
