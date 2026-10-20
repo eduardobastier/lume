@@ -15,6 +15,23 @@ Open source. Built with Claude Code. One button to undo.
 
 </div>
 
+## Novidades desta versão (my-tv 1.1)
+
+Adaptada e testada numa TCL Google TV com **Android 12**, com tudo configurável na própria TV em **Ajustes do Início** (visual dos Ajustes da Apple TV, claro ou escuro):
+
+- **Recomendações em alta no Brasil**, em qualquer streaming ou só nos apps da TV, com **categorias** (Suspense, Ação, Comédia, Terror, Drama…), **só lançamentos** e sem anime/desenho a não ser que você marque.
+- **Cards que trocam sozinhos**, um de cada vez a cada 5 s, com animação; o card com foco para e mostra a **sinopse**; o pôster oficial nos cards verticais.
+- **OK no card**: toca o **trailer no YouTube** (dublado primeiro, depois legendado), no **SmartTube** ou abre o título no **Nuvio**.
+- **Dock editável**: segure OK para adicionar apps de *Todos os Apps* ou tirar da dock; ícones seguem o tema.
+- **Tema** Automático (pôr do sol), Claro ou Escuro.
+- **Previsão do tempo** no topo, pela localização da internet ou por uma cidade digitada; pode ser desligada.
+- **TV ao Vivo** abre a TV a cabo no HDMI (ou a antena), ou o app que você escolher.
+- **Tela de descanso** com os mesmos títulos dos cards e tempo de espera ajustável (1 min a 1 h).
+- **Chave do TMDB digitada na TV**, para um APK servir em qualquer TV; **sons de navegação** opcionais; cotações de cripto opcionais (`show_prices`).
+- Correções para Android 12: tela de descanso que fechava sozinha, troca da tela inicial, sintonizador certo na TV ao Vivo, e animações sem travar (sombras pré-desenhadas).
+
+**APK pronto:** veja a página de *Releases*. Ele não traz chave do TMDB: coloque a sua em *Ajustes do Início → Recomendações → Chave do TMDB*. O app é só Java, então o mesmo APK roda em TVs arm64 e arm (32 bits).
+
 ## What you get
 
 - **No ads.** No sponsored rows, banners or autoplaying promos. Not one.
