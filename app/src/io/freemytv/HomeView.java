@@ -568,6 +568,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         if (tilesMoving || tilesDirty) tiles.invalidate();
         if (statusMoving || statusDirty || bgFading) status.invalidate();
         if (heroMoving || heroDirty || heroFading || cardsFading()) heroLayer.invalidate();
+        if (drawerDirty || bgFading) weatherStale = true;
         if (drawerItemsMoving || drawerDirty || bgFading) drawerLayer.invalidate();
         if (gridMoving || gridDirty) sheetLayer.invalidate();
         if (drawerMoving || bgFading) sky.invalidate();
@@ -589,6 +590,35 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
                 || drawerOpen || drawer.value > 0.001f;
         Choreographer.getInstance().postFrameCallback(this);
     }
+
+    // Soft shadows, blurred once into a bitmap and then only stretched: a BlurMaskFilter is blurred again on the CPU
+    // every frame its size changes (a growing focused tile), which took ~15 ms per frame on the TV.
+    private final Map<String, Bitmap> shadows = new HashMap<>();
+    private final Paint shadowPaint = new Paint(Paint.FILTER_BITMAP_FLAG);
+
+    private void drawShadow(Canvas c, RectF rect, float radius, float blur, int color) {
+        if (rect.width() <= 1 || rect.height() <= 1 || (color >>> 24) == 0) return;
+        int qw = Math.max(16, Math.round(rect.width() / 16) * 16), qh = Math.max(16, Math.round(rect.height() / 16) * 16);
+        int qr = Math.round(radius / 4) * 4, qb = Math.max(1, Math.round(blur));
+        String key = qw + "x" + qh + "r" + qr + "b" + qb;
+        Bitmap b = shadows.get(key);
+        int pad = qb * 2;
+        if (b == null) {
+            if (shadows.size() > 48) shadows.clear();
+            b = Bitmap.createBitmap(qw + 2 * pad, qh + 2 * pad, Bitmap.Config.ALPHA_8);
+            Canvas sc = new Canvas(b);
+            Paint p = new Paint(Paint.ANTI_ALIAS_FLAG);
+            p.setMaskFilter(new BlurMaskFilter(qb, BlurMaskFilter.Blur.NORMAL));
+            sc.drawRoundRect(new RectF(pad, pad, pad + qw, pad + qh), qr, qr, p);
+            shadows.put(key, b);
+        }
+        float sx = rect.width() / qw, sy = rect.height() / qh;
+        shadowRect.set(rect.left - pad * sx, rect.top - pad * sy, rect.right + pad * sx, rect.bottom + pad * sy);
+        shadowPaint.setColor(color);
+        c.drawBitmap(b, null, shadowRect, shadowPaint);
+    }
+
+    private final RectF shadowRect = new RectF();
 
     private static boolean step(Spring[] springs, float dt) {
         boolean moving = false;
@@ -1036,7 +1066,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         tmp.set(platterRect);
         tmp.offset(0, 18 * k);
         shadow.setColor(tone(0x1F000000, 0x52000000));
-        c.drawRoundRect(tmp, radius, radius, shadow);
+        drawShadow(c, tmp, radius, 26 * k, shadow.getColor());
         // White glass by day; smoked glass at night.
         scene.liquid(c, platterRect, radius, tone(0xFFFFFFFF, SMOKE), tone(0.42f, 0.12f), tone(0.03f, 0.08f),
                 tone(30, 34) * k, tone(22, 28) * k, tone(0.65f, 0.95f), 1);
@@ -1118,7 +1148,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         tmp.set(-bw / 2, -bh / 2, bw / 2, bh / 2);
         tmp.offset(0, (4 + 14 * f) * k);
         shadowDeep.setColor(Ui.alpha(0xFF000000, tone(0.14f, 0.3f) + tone(0.18f, 0.3f) * fc));
-        c.drawRoundRect(tmp, r0, r0, shadowDeep);
+        drawShadow(c, tmp, r0, 30 * k, shadowDeep.getColor());
         c.restore();
         int[] style = TILE_STYLE.get(it.key);
         // The white tile needs the dark version of the logo (assets/logos/<key>-dark.png); without it, a logo lifted
@@ -1285,7 +1315,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
             tmp.set(r);
             tmp.offset(0, drop);
             shadow.setColor(Ui.alpha(shadowColor, 1 - dk));
-            c.drawRoundRect(tmp, radius, radius, shadow);
+            drawShadow(c, tmp, radius, 26 * k, shadow.getColor());
             scene.glass(c, r, radius, 0xFFFFFFFF, lightTint, 0, 0, 0.02f, 1, 1 - dk);
         }
         if (dk > 0.001f) scene.glass(c, r, radius, SMOKE, 0.4f, 0, 0, 0.02f, 1, dk);
@@ -1313,9 +1343,25 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         for (int i = 0; i < drawerItems.size(); i++) if (drawerFocus[i].value > 0.02f && (top < 0 || drawerFocus[i].value > drawerFocus[top].value)) top = i;
         for (int i = 0; i < drawerItems.size(); i++) if (i != top) drawDrawerTile(c, i);
         if (top >= 0) drawDrawerTile(c, top);
-        drawWeatherCard(c, weatherCard);
+        // The weather card is recorded once and replayed while only the focus moves in the drawer (redrawing its
+        // glass and text on every frame of a focus change made the drawer stutter on the TV).
+        if (c.isHardwareAccelerated()) {
+            if (weatherStale || weatherNode.getWidth() != getWidth()) {
+                weatherNode.setPosition(0, 0, getWidth(), getHeight());
+                Canvas rc = weatherNode.beginRecording();
+                drawWeatherCard(rc, weatherCard);
+                weatherNode.endRecording();
+                weatherStale = false;
+            }
+            c.drawRenderNode(weatherNode);
+        } else {
+            drawWeatherCard(c, weatherCard);
+        }
         if (HomeData.coinCount() > 0) drawQuotesCard(c, quotesCard);
     }
+
+    private final android.graphics.RenderNode weatherNode = new android.graphics.RenderNode("weather");
+    private boolean weatherStale = true;
 
     /** Square drawer button: symbol and name; an input with no device is dimmed. Focused: white, with dark text. */
     private void drawDrawerTile(Canvas c, int i) {
@@ -1329,7 +1375,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
             tmp.set(cell);
             tmp.offset(0, 12 * k * f);
             shadow.setColor(Ui.alpha(0xFF000000, 0.45f * f));
-            c.drawRoundRect(tmp, r, r, shadow);
+            drawShadow(c, tmp, r, 26 * k, shadow.getColor());
         }
         if (f < 0.99f) drawerGlass(c, cell, r, 0.7f, 0x14000000, 6 * k);
         if (f > 0.01f) {
@@ -1531,7 +1577,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
             tmp.set(cell);
             tmp.offset(0, 16 * k * f);
             shadow.setColor(Ui.alpha(0xFF000000, 0.55f * fc));
-            c.drawRoundRect(tmp, r, r, shadow);
+            drawShadow(c, tmp, r, 26 * k, shadow.getColor());
         }
         clip.reset();
         clip.addRoundRect(cell, r, r, Path.Direction.CW);
@@ -2152,7 +2198,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
                     tmp.set(cell);
                     tmp.offset(0, 8 * k * focus);
                     shadow.setColor(Ui.alpha(0xFF000000, tone(0.22f, 0.4f) * focus));
-                    c.drawRoundRect(tmp, rr, rr, shadow);
+                    drawShadow(c, tmp, rr, 26 * k, shadow.getColor());
                 }
                 fill.setShader(null);
                 fill.setColor(Ui.alpha(0xFFFFFFFF, focus));
@@ -2188,7 +2234,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         tmp.set(-bw / 2, -bh / 2, bw / 2, bh / 2);
         tmp.offset(0, (10 + 14 * f) * k);
         shadowDeep.setColor(Ui.alpha(0xFF000000, tone(0.14f, 0.32f) + tone(0.2f, 0.28f) * f));
-        c.drawRoundRect(tmp, r0, r0, shadowDeep);
+        drawShadow(c, tmp, r0, 30 * k, shadowDeep.getColor());
         c.restore();
         clip.reset();
         clip.addRoundRect(cell, r, r, Path.Direction.CW);
@@ -2273,7 +2319,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
             tmp.set(cell);
             tmp.offset(0, (6 + 8 * f) * k);
             shadow.setColor(Ui.alpha(0xFF000000, tone(0.1f, 0.3f) + tone(0.14f, 0.2f) * f));
-            c.drawRoundRect(tmp, rad, rad, shadow);
+            drawShadow(c, tmp, rad, 26 * k, shadow.getColor());
             scene.liquid(c, cell, rad, tone(0xFFFFFFFF, SMOKE), tone(0.55f, 0.5f), tone(0.02f, 0.01f), 12 * k, 8 * k,
                     tone(0.6f, 0.45f), 1 - f);
             if (f > 0.01f) {

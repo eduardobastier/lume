@@ -147,4 +147,12 @@ final class Ui {
         OVAL.set(cx - r, cy - r, cx + r, cy + r);
         c.drawArc(OVAL, (seconds * 360f) % 360f, 270f, false, stroke);
     }
+
+    /**
+     * BitmapShader filtering (Android 13+). Android 12 has no setFilterMode and crashed the screensaver there; it
+     * filters through the Paint's FILTER_BITMAP_FLAG instead.
+     */
+    static void filter(android.graphics.BitmapShader shader, int mode) {
+        if (android.os.Build.VERSION.SDK_INT >= 33) shader.setFilterMode(mode);
+    }
 }

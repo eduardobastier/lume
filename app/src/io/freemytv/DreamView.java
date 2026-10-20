@@ -66,7 +66,7 @@ final class DreamView extends View implements Choreographer.FrameCallback, HomeD
             this.image = image;
             this.frost = frost;
             shader = new BitmapShader(frost, Shader.TileMode.CLAMP, Shader.TileMode.CLAMP);
-            shader.setFilterMode(BitmapShader.FILTER_MODE_LINEAR);
+            Ui.filter(shader, BitmapShader.FILTER_MODE_LINEAR);
             this.lightCaption = lightCaption;
             this.lightClock = lightClock;
             zoomIn = n % 2 == 0;
@@ -598,7 +598,7 @@ final class DreamView extends View implements Choreographer.FrameCallback, HomeD
 
     private static BitmapShader nearest(Bitmap b) {
         BitmapShader s = new BitmapShader(b, Shader.TileMode.CLAMP, Shader.TileMode.CLAMP);
-        s.setFilterMode(BitmapShader.FILTER_MODE_NEAREST);
+        Ui.filter(s, BitmapShader.FILTER_MODE_NEAREST);
         return s;
     }
 

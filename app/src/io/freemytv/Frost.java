@@ -26,7 +26,7 @@ final class Frost {
         }
         bitmap.setPixels(pixels, 0, W, 0, 0, W, H);
         BitmapShader shader = new BitmapShader(bitmap, Shader.TileMode.CLAMP, Shader.TileMode.CLAMP);
-        shader.setFilterMode(BitmapShader.FILTER_MODE_LINEAR);
+        Ui.filter(shader, BitmapShader.FILTER_MODE_LINEAR);
         return shader;
     }
 

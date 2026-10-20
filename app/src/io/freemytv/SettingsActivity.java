@@ -88,24 +88,57 @@ public class SettingsActivity extends Activity {
      * the key built into the app (if any).
      */
     void askTmdbKey() {
+        final boolean light = view.isLight();
+        final int ink = light ? 0xFF1D1D1F : 0xFFF5F5F7, dim = light ? 0x991D1D1F : 0x99F5F5F7;
+        float dp = getResources().getDisplayMetrics().density;
+        android.widget.LinearLayout box = new android.widget.LinearLayout(this);
+        box.setOrientation(android.widget.LinearLayout.VERTICAL);
+        int pad = Math.round(28 * dp);
+        box.setPadding(pad, pad, pad, Math.round(8 * dp));
+        android.widget.TextView title = new android.widget.TextView(this);
+        title.setText(Ui.tr("Chave do TMDB", "TMDB key"));
+        title.setTextColor(ink);
+        title.setTextSize(24);
+        title.setTypeface(Ui.semibold);
+        android.widget.TextView message = new android.widget.TextView(this);
+        message.setText(Ui.tr("Grátis em themoviedb.org → Ajustes → API. Deixe vazio para usar a chave do app.",
+                "Free at themoviedb.org → Settings → API. Leave empty to use the app's key."));
+        message.setTextColor(dim);
+        message.setTextSize(15);
+        message.setTypeface(Ui.regular);
+        message.setPadding(0, Math.round(8 * dp), 0, Math.round(16 * dp));
         final android.widget.EditText field = new android.widget.EditText(this);
         field.setSingleLine(true);
+        field.setTextColor(ink);
+        field.setHintTextColor(dim);
+        field.setTypeface(Ui.regular);
         field.setHint(Ui.tr("Chave da API (v3) ou token de leitura", "API key (v3) or read access token"));
         field.setText(Prefs.typedTmdbKey(this) ? Prefs.tmdbKey(this) : "");
         field.setInputType(android.text.InputType.TYPE_CLASS_TEXT | android.text.InputType.TYPE_TEXT_VARIATION_VISIBLE_PASSWORD);
-        android.widget.FrameLayout box = new android.widget.FrameLayout(this);
-        int pad = Math.round(24 * getResources().getDisplayMetrics().density);
-        box.setPadding(pad, pad / 2, pad, 0);
+        field.setTypeface(Ui.regular);   // after setInputType, which switches to monospace
+        field.setBackgroundTintList(android.content.res.ColorStateList.valueOf(0xFF0A84FF));
+        box.addView(title);
+        box.addView(message);
         box.addView(field);
-        new android.app.AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
-                .setTitle(Ui.tr("Chave do TMDB", "TMDB key"))
-                .setMessage(Ui.tr("Grátis em themoviedb.org → Ajustes → API. Deixe vazio para usar a chave do app.",
-                        "Free at themoviedb.org → Settings → API. Leave empty to use the app's key."))
+        // Our own colors (the system's dialog stays dark on this TV): the same panel as the genre popup.
+        final android.app.AlertDialog dialog = new android.app.AlertDialog.Builder(this)
                 .setView(box)
                 .setPositiveButton(Ui.tr("Salvar", "Save"), (d, w) -> saveTmdbKey(field.getText().toString().trim()))
                 .setNegativeButton(Ui.tr("Cancelar", "Cancel"), null)
-                .show();
-        field.requestFocus();
+                .create();
+        android.graphics.drawable.GradientDrawable panel = new android.graphics.drawable.GradientDrawable();
+        panel.setColor(light ? 0xFFF2F2F7 : 0xFF2C2C2E);
+        panel.setCornerRadius(28 * dp);
+        dialog.setOnShowListener(d -> {
+            dialog.getWindow().setBackgroundDrawable(panel);
+            for (int which : new int[] {android.app.AlertDialog.BUTTON_POSITIVE, android.app.AlertDialog.BUTTON_NEGATIVE}) {
+                android.widget.Button b = dialog.getButton(which);
+                b.setTextColor(which == android.app.AlertDialog.BUTTON_POSITIVE ? 0xFF0A84FF : ink);
+                b.setTypeface(Ui.medium);
+            }
+            field.requestFocus();
+        });
+        dialog.show();
     }
 
     private void saveTmdbKey(final String key) {
@@ -256,6 +289,10 @@ public class SettingsActivity extends Activity {
 
         private int fg(int color) {
             return light ? (color & 0xFF000000) | 0x1D1D1F : color;
+        }
+
+        boolean isLight() {
+            return light;
         }
 
         private boolean wantLight() {

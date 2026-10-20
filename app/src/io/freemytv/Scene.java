@@ -149,7 +149,7 @@ final class Scene {
 
     private static BitmapShader linear(Bitmap b) {
         BitmapShader s = new BitmapShader(b, Shader.TileMode.CLAMP, Shader.TileMode.CLAMP);
-        s.setFilterMode(BitmapShader.FILTER_MODE_LINEAR);
+        Ui.filter(s, BitmapShader.FILTER_MODE_LINEAR);
         return s;
     }
 
@@ -184,7 +184,7 @@ final class Scene {
         imageFrost = true;
         if (glass == null) return;
         BitmapShader s = new BitmapShader(frostImage, Shader.TileMode.CLAMP, Shader.TileMode.CLAMP);
-        s.setFilterMode(BitmapShader.FILTER_MODE_LINEAR);
+        Ui.filter(s, BitmapShader.FILTER_MODE_LINEAR);
         glass.setInputShader("frost", s);
         setFrostScale();
     }
