@@ -396,8 +396,8 @@ public class SettingsActivity extends Activity {
             int count = recs.optInt("count");
             if (!hasKey) line = Ui.tr("Sem chave do TMDB: coloque a sua em Recomendações.", "No TMDB key: add yours in Recommendations.");
             else if (!error.isEmpty()) line = Ui.tr("Erro: ", "Error: ") + error + ".";
-            else if (count > 0) line = Ui.tr("Ligadas · " + count + " títulos nos apps da TV, 3 novos a cada hora.",
-                    "On · " + count + " titles from the TV's apps, 3 new ones every hour.");
+            else if (count > 0) line = Ui.tr("Ligadas · " + count + " títulos em alta, trocando a cada 5 segundos.",
+                    "On · " + count + " trending titles, changing every 5 seconds.");
             else line = Ui.tr("Buscando os títulos…", "Fetching titles…");
             c.drawText(TextUtils.ellipsize(line, notice, 790 * k, TextUtils.TruncateAt.END).toString(), x, y + 42 * k, notice);
             version.setTextAlign(Paint.Align.LEFT);
@@ -514,7 +514,7 @@ public class SettingsActivity extends Activity {
         /** Theme: a list like Recommendations, with a check on the current one. */
         private void drawThemeScreen(Canvas c) {
             String[] names = themes();
-            String[] notes = {Ui.tr("Claro de dia, escuro depois do pôr do sol", "Light by day, dark after sunset"),
+            String[] notes = {Ui.tr("Segue o pôr do sol", "Follows the sunset"),
                     Ui.tr("Sempre claro", "Always light"), Ui.tr("Sempre escuro", "Always dark")};
             int current = HomeView.theme(getContext());
             for (int i = 0; i < 3; i++) {
