@@ -65,6 +65,7 @@ final class HomeApps {
         int kind;
         String key, label, pkg, inputId, number;
         String uri;         // apps: open this link inside the app (a YouTube video) instead of the app's start screen
+        boolean fresh;      // with uri: start the app over, for apps that ignore a link while they're already open
         String symbol;      // icon for the shortcuts and special cards
         Bitmap tile;        // 16:9 card (apps and specials)
         Bitmap logo;        // colored logo with no background (shelf); null = use the card
@@ -397,6 +398,7 @@ final class HomeApps {
             case APP:
                 if (it.uri != null) {
                     intent = new Intent(Intent.ACTION_VIEW, android.net.Uri.parse(it.uri)).setPackage(it.pkg);
+                    if (it.fresh) intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TASK);
                     break;
                 }
                 intent = launchIntent(a.getPackageManager(), it.pkg);

@@ -1963,6 +1963,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
             if (nuvio) {
                 it = HomeApps.app(Prefs.NUVIO_PKG, "Nuvio");
                 it.uri = "nuvio://meta?type=" + (p.kind.equals("movie") ? "movie" : "series") + "&tmdb=" + p.id;
+                it.fresh = true;   // an open Nuvio receives the link but stays on the title it was showing
             } else {
                 boolean st = action.equals(Prefs.SMARTTUBE) && smart != null;
                 it = HomeApps.app(st ? smart : Prefs.YOUTUBE_PKG, st ? "SmartTube" : "YouTube");
