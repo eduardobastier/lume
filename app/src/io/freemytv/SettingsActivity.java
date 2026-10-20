@@ -184,7 +184,10 @@ public class SettingsActivity extends Activity {
         /** How long the TV waits before the screensaver (Android's screen-off timeout), in minutes. */
         private static final int[] SAVER_MINUTES = {1, 2, 5, 10, 15, 30, 60};
         /** The popup over the list: none, the theme, the genres (several at once) or what OK on a card opens. */
-        private static final int NO_POPUP = 0, THEME_POPUP = 1, GENRE_POPUP = 2, ACTION_POPUP = 3, LIVE_POPUP = 4, SAVER_POPUP = 5;
+        private static final int NO_POPUP = 0, THEME_POPUP = 1, GENRE_POPUP = 2, ACTION_POPUP = 3, LIVE_POPUP = 4, SAVER_POPUP = 5,
+                YES_NO_POPUP = 6;
+        /** The on/off choice the Yes/No popup is for: its Prefs key and title. */
+        private String yesNoKey = "", yesNoTitle = "";
         /** Live TV choices: [value, name], built when the popup opens (the TV's inputs and installed apps). */
         private List<String[]> liveChoices = new ArrayList<>();
         private int popup = NO_POPUP, popupFocus;
@@ -408,15 +411,9 @@ public class SettingsActivity extends Activity {
                 float base = rowRect.centerY() + Ui.halfCap(rowLabel);
                 c.drawText(labels[i], rowRect.left + 30 * k, base, rowLabel);
                 float right = rowRect.right - 30 * k;
-                if (i >= 5 || (i >= 1 && i <= 3)) {
-                    if (i >= 1 && i <= 3) {
-                        rowValue.setColor(blend(fg(0x8CFFFFFF), 0x8C1C1C1E, f));
-                        float cw = Symbols.width(getContext(), "chevron_right", 22 * k);
-                        c.drawText(values[i], right - cw - 14 * k, base, rowValue);
-                    }
-                    float cw = Symbols.width(getContext(), "chevron_right", 22 * k);
-                    Symbols.draw(getContext(), c, "chevron_right", right - cw / 2, rowRect.centerY(), 22 * k, blend(fg(0x66FFFFFF), 0x991C1C1E, f));
-                } else if (i == 0 && working) {
+                if (!(i == 0 && working)) {
+                    valueAndChevron(c, values[i], base, f);
+                } else {
                     // Switching: the current step in place of the value, with the spinning arc.
                     String text = busyText.isEmpty() ? Ui.tr("Começando…", "Starting…") : busyText;
                     rowValue.setColor(blend(fg(0xB3FFFFFF), 0xB31C1C1E, f));
@@ -425,9 +422,6 @@ public class SettingsActivity extends Activity {
                     float sx = right - rowValue.measureText(shown) - 26 * k;
                     spinner.setColor(blend(fg(0xFFFFFFFF), INK, f));
                     Ui.spinner(c, sx, rowRect.centerY(), 12 * k, seconds * 1.3f, spinner);
-                } else {
-                    rowValue.setColor(blend(fg(0x8CFFFFFF), 0x8C1C1C1E, f));
-                    c.drawText(values[i], right, base, rowValue);
                 }
             }
 
@@ -539,10 +533,7 @@ public class SettingsActivity extends Activity {
                 rowLabel.setColor(blend(fg(0xF2FFFFFF), INK, f));
                 float base = rowRect.centerY() + Ui.halfCap(rowLabel);
                 c.drawText(labels[i], rowRect.left + 30 * k, base, rowLabel);
-                rowValue.setColor(blend(fg(0x8CFFFFFF), 0x8C1C1C1E, f));
-                float room = rowRect.width() - 60 * k - rowLabel.measureText(labels[i]) - 40 * k;
-                c.drawText(TextUtils.ellipsize(values[i], new TextPaint(rowValue), room, TextUtils.TruncateAt.END).toString(),
-                        rowRect.right - 30 * k, base, rowValue);
+                valueAndChevron(c, values[i], base, f);
             }
             Paint hint = Ui.text(Ui.regular, 23 * k, fg(0x8CFFFFFF));
             c.drawText(Ui.tr("As mudanças aparecem quando você voltar ao Início.", "Changes show up when you go back home."),
@@ -575,8 +566,7 @@ public class SettingsActivity extends Activity {
                 rowLabel.setColor(blend(fg(0xF2FFFFFF), INK, f));
                 float base = rowRect.centerY() + Ui.halfCap(rowLabel);
                 c.drawText(labels[i], rowRect.left + 30 * k, base, rowLabel);
-                rowValue.setColor(blend(fg(0x8CFFFFFF), 0x8C1C1C1E, f));
-                c.drawText(values[i], rowRect.right - 30 * k, base, rowValue);
+                if (i == 1) valueAndChevron(c, values[i], base, f);
             }
             int sleep = android.provider.Settings.Secure.getInt(getContext().getContentResolver(), "sleep_timeout", -1);
             Paint hint = Ui.text(Ui.regular, 23 * k, fg(0x8CFFFFFF));
@@ -648,9 +638,22 @@ public class SettingsActivity extends Activity {
             return v.startsWith("input:") ? "HDMI" : v;
         }
 
+        /** The value on the right of a row, then the chevron that says it opens more (Apple TV's ">"). */
+        private void valueAndChevron(Canvas c, String value, float base, float f) {
+            float right = rowRect.right - 30 * k;
+            float cw = Symbols.width(getContext(), "chevron_right", 22 * k);
+            Symbols.draw(getContext(), c, "chevron_right", right - cw / 2, rowRect.centerY(), 22 * k, blend(fg(0x66FFFFFF), 0x991C1C1E, f));
+            if (value.isEmpty()) return;
+            rowValue.setColor(blend(fg(0x8CFFFFFF), 0x8C1C1C1E, f));
+            float room = rowRect.width() * 0.55f;
+            c.drawText(TextUtils.ellipsize(value, new TextPaint(rowValue), room, TextUtils.TruncateAt.END).toString(),
+                    right - cw - 14 * k, base, rowValue);
+        }
+
         private String popupTitle() {
             if (popup == LIVE_POPUP) return Ui.tr("TV ao Vivo abre", "Live TV opens");
             if (popup == SAVER_POPUP) return Ui.tr("Começar após", "Start after");
+            if (popup == YES_NO_POPUP) return yesNoTitle;
             return popup == THEME_POPUP ? Ui.tr("Tema", "Theme") : popup == GENRE_POPUP ? Ui.tr("Categorias", "Genres")
                     : Ui.tr("Ao apertar OK no card", "OK on a card");
         }
@@ -658,6 +661,7 @@ public class SettingsActivity extends Activity {
         private String[] popupOptions() {
             if (popup == THEME_POPUP) return themes();
             if (popup == ACTION_POPUP) return actions();
+            if (popup == YES_NO_POPUP) return new String[] {Ui.tr("Sim", "On"), Ui.tr("Não", "Off")};
             if (popup == SAVER_POPUP) {
                 String[] out = new String[SAVER_MINUTES.length];
                 for (int i = 0; i < out.length; i++) out[i] = minutes(SAVER_MINUTES[i]);
@@ -677,6 +681,7 @@ public class SettingsActivity extends Activity {
             if (popup == THEME_POPUP) return HomeView.theme(getContext()) == i;
             if (popup == ACTION_POPUP) return actionIndex() == i;
             if (popup == SAVER_POPUP) return SAVER_MINUTES[i] == saverMinutes();
+            if (popup == YES_NO_POPUP) return yesNo() == (i == 0);
             if (popup == LIVE_POPUP) return liveChoices.get(i)[0].equals(Prefs.liveTv(getContext()));
             return Prefs.genres(getContext()).contains(Prefs.GENRES[i][0]);
         }
@@ -726,10 +731,23 @@ public class SettingsActivity extends Activity {
             }
         }
 
+        private boolean yesNo() {
+            Context c = getContext();
+            if (yesNoKey.equals("sounds")) return Prefs.sounds(c);
+            if (yesNoKey.equals("recs_recent")) return Prefs.recent(c);
+            return Prefs.anyService(c);
+        }
+
+        private void openYesNo(String key, String title) {
+            yesNoKey = key;
+            yesNoTitle = title;
+            openPopup(YES_NO_POPUP);
+        }
+
         private void openPopup(int kind) {
             popup = kind;
             popupFocus = kind == THEME_POPUP ? HomeView.theme(getContext()) : kind == ACTION_POPUP ? actionIndex() : 0;
-            if (kind == LIVE_POPUP || kind == SAVER_POPUP) {
+            if (kind == LIVE_POPUP || kind == SAVER_POPUP || kind == YES_NO_POPUP) {
                 for (int i = 0; i < popupOptions().length; i++) if (popupChecked(i)) popupFocus = i;
             }
             for (Spring s : popupPop) s.snap(0);
@@ -869,6 +887,9 @@ public class SettingsActivity extends Activity {
                         } else if (popup == ACTION_POPUP) {
                             Prefs.setCardAction(c, ACTION_KEYS[popupFocus]);
                             popup = NO_POPUP;
+                        } else if (popup == YES_NO_POPUP) {
+                            Prefs.set(c, yesNoKey, popupFocus == 0);
+                            popup = NO_POPUP;
                         } else if (popup == SAVER_POPUP) {
                             setSaverMinutes(SAVER_MINUTES[popupFocus]);
                             popup = NO_POPUP;
@@ -929,8 +950,8 @@ public class SettingsActivity extends Activity {
             } else if (screen == RECS) {
                 if (focus == 0) activity.askTmdbKey();
                 else if (focus == 1) openPopup(GENRE_POPUP);
-                else if (focus == 2) Prefs.set(c, "recs_recent", !Prefs.recent(c));
-                else if (focus == 3) Prefs.set(c, "recs_all", !Prefs.anyService(c));
+                else if (focus == 2) openYesNo("recs_recent", Ui.tr("Só lançamentos", "New releases only"));
+                else if (focus == 3) openYesNo("recs_all", Ui.tr("Em qualquer streaming", "On any streaming service"));
                 else openPopup(ACTION_POPUP);
                 invalidate();
                 return;
@@ -948,7 +969,7 @@ public class SettingsActivity extends Activity {
                 liveChoices = liveChoices();
                 openPopup(LIVE_POPUP);
             } else if (focus == 4) {
-                Prefs.set(c, "sounds", !Prefs.sounds(c));
+                openYesNo("sounds", Ui.tr("Sons ao navegar", "Navigation sounds"));
             } else if (focus == 5) {
                 screen = RECS;
                 focus = 0;
