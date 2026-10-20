@@ -752,6 +752,10 @@ public class SettingsActivity extends Activity {
             Context c = getContext();
             if (screen == THEME) {
                 HomeView.setTheme(c, focus);   // the home screen follows when it shows again
+                if (wantLight() != light) {      // this screen follows right away
+                    light = !light;
+                    initPaints();
+                }
                 screen = MAIN;
                 focus = 2;
                 for (Spring s : pop) s.snap(0);
