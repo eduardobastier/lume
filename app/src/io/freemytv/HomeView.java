@@ -1350,19 +1350,19 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         } else if (c.isHardwareAccelerated()) {
             if (weatherStale || weatherNode.getWidth() != getWidth()) {
                 weatherNode.setPosition(0, 0, getWidth(), getHeight());
-                Canvas rc = weatherNode.beginRecording();
+                Canvas rc = weatherNode.beginRecording(getWidth(), getHeight());
                 drawWeatherCard(rc, weatherCard);
                 weatherNode.endRecording();
                 weatherStale = false;
             }
-            c.drawRenderNode(weatherNode);
+            weatherNode.draw(c);
         } else {
             drawWeatherCard(c, weatherCard);
         }
         if (HomeData.coinCount() > 0) drawQuotesCard(c, quotesCard);
     }
 
-    private final android.graphics.RenderNode weatherNode = new android.graphics.RenderNode("weather");
+    private final Node weatherNode = new Node("weather");
     private boolean weatherStale = true;
 
     /** Square drawer button: symbol and name; an input with no device is dimmed. Focused: white, with dark text. */

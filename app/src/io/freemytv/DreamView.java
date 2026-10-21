@@ -9,8 +9,6 @@ import android.graphics.Matrix;
 import android.graphics.Paint;
 import android.graphics.RadialGradient;
 import android.graphics.Rect;
-import android.graphics.RecordingCanvas;
-import android.graphics.RenderNode;
 import android.graphics.RuntimeShader;
 import android.graphics.Shader;
 import android.os.Handler;
@@ -58,7 +56,7 @@ final class DreamView extends View implements Choreographer.FrameCallback, HomeD
         final float lightCaption, lightClock;
         final boolean zoomIn;
         final float panX, panY;
-        final RenderNode caption = new RenderNode("caption");
+        final Node caption = new Node("caption");
         long startedAt;
 
         Slide(Recs.Pick pick, Bitmap image, Bitmap frost, float lightCaption, float lightClock, int n) {
@@ -100,8 +98,8 @@ final class DreamView extends View implements Choreographer.FrameCallback, HomeD
     private final Recs recs;
     private final Handler handler = new Handler(Looper.getMainLooper());
     private ExecutorService worker = Executors.newSingleThreadExecutor();
-    private final RenderNode content = new RenderNode("clock");     // without photos: the clock over the aurora
-    private final RenderNode chrome = new RenderNode("corner");     // date, weather, prices and the clock's shadow
+    private final Node content = new Node("clock");     // without photos: the clock over the aurora
+    private final Node chrome = new Node("corner");     // date, weather, prices and the clock's shadow
     private final float timeOffset = (float) (Math.random() * 300);
     private final Matrix matrix = new Matrix();
     private final float[] placeA = new float[3], placeB = new float[3];
@@ -147,7 +145,7 @@ final class DreamView extends View implements Choreographer.FrameCallback, HomeD
         Shaders.dream(scene.palette);
         scene.setMotion(0.4f, 0.32f);
         scene.applyPalette();
-        content.setUseCompositingLayer(true, null);
+        content.setUseCompositingLayer(true);
         try {
             glassShader = new RuntimeShader(Shaders.GLASS_TEXT);
             glassPaint.setShader(glassShader);
@@ -441,7 +439,7 @@ final class DreamView extends View implements Choreographer.FrameCallback, HomeD
 
         if (chromeDirty) recordChrome();
         chrome.setAlpha(first);
-        canvas.drawRenderNode(chrome);
+        chrome.draw(canvas);
         drawGlass(canvas, first, e);
         drawCaptions(canvas, up);
     }
@@ -499,7 +497,7 @@ final class DreamView extends View implements Choreographer.FrameCallback, HomeD
     // MARK: - Corner: date and weather, glass clock, prices
 
     private void recordChrome() {
-        RecordingCanvas c = chrome.beginRecording(w, h);
+        Canvas c = chrome.beginRecording(w, h);
         try {
             float right = RIGHT * k;
             float x = right;
@@ -672,7 +670,7 @@ final class DreamView extends View implements Choreographer.FrameCallback, HomeD
     // MARK: - Photo caption (bottom left)
 
     private void recordCaption(Slide s) {
-        RecordingCanvas c = s.caption.beginRecording(w, h);
+        Canvas c = s.caption.beginRecording(w, h);
         try {
             float x = MARGIN * k, metaBase = META_BASE * k, titleBase = metaBase - 58 * k;
             String title = s.pick.title == null ? "" : s.pick.title;
@@ -699,7 +697,7 @@ final class DreamView extends View implements Choreographer.FrameCallback, HomeD
             float a = current.startedAt == firstAt ? fadeIn(up - firstAt - 700, 900) : 1;
             current.caption.setAlpha(a);
             current.caption.setTranslationY(14 * k * (1 - a));
-            c.drawRenderNode(current.caption);
+            current.caption.draw(c);
             return;
         }
         long t = up - incoming.startedAt;
@@ -707,13 +705,13 @@ final class DreamView extends View implements Choreographer.FrameCallback, HomeD
         if (out > 0.004f) {
             current.caption.setAlpha(out);
             current.caption.setTranslationY(0);
-            c.drawRenderNode(current.caption);
+            current.caption.draw(c);
         }
         float in = fadeIn(t - 1300, 900);
         if (in > 0.004f) {
             incoming.caption.setAlpha(in);
             incoming.caption.setTranslationY(14 * k * (1 - in));
-            c.drawRenderNode(incoming.caption);
+            incoming.caption.draw(c);
         }
     }
 
@@ -727,7 +725,7 @@ final class DreamView extends View implements Choreographer.FrameCallback, HomeD
         }
         scene.drawBackground(canvas);
         if (dirty) {
-            RecordingCanvas rc = content.beginRecording(w, h);
+            Canvas rc = content.beginRecording(w, h);
             try {
                 drawContent(rc);
             } finally {
@@ -739,7 +737,7 @@ final class DreamView extends View implements Choreographer.FrameCallback, HomeD
         content.setTranslationX((float) (40 * k * Math.sin(phase)));
         content.setTranslationY((float) (26 * k * Math.sin(2 * phase + 0.7)));
         content.setAlpha(alpha);
-        canvas.drawRenderNode(content);
+        content.draw(canvas);
     }
 
     private void drawContent(Canvas c) {

@@ -30,7 +30,7 @@ Adaptada e testada numa TCL Google TV com **Android 12**, com tudo configurável
 - **Chave do TMDB digitada na TV**, para um APK servir em qualquer TV; **sons de navegação** opcionais; cotações de cripto opcionais (`show_prices`).
 - Correções para Android 12: tela de descanso que fechava sozinha, troca da tela inicial, sintonizador certo na TV ao Vivo, e animações sem travar (sombras pré-desenhadas).
 
-**APK pronto:** veja a página de *Releases*. Ele não traz chave do TMDB: coloque a sua em *Ajustes do Início → Recomendações → Chave do TMDB*. O app é só Java, então o mesmo APK roda em TVs arm64 e arm (32 bits).
+**APK pronto:** veja a página de *Releases*. Ele não traz chave do TMDB: coloque a sua em *Ajustes do Início → Recomendações → Chave do TMDB*. O app é só Java, então o mesmo APK roda em TVs arm64 e arm (32 bits), a partir do Android 9 (inclui Mi TV Stick e Fire TV Stick).
 
 ## What you get
 
@@ -45,7 +45,7 @@ Adaptada e testada numa TCL Google TV com **Android 12**, com tudo configurável
 
 ## Install
 
-About ten minutes. You need a Google TV or Android TV (Android 12 or newer) and a computer on the same Wi-Fi.
+About ten minutes. You need a Google TV, Android TV or Fire TV (Android 9 or newer) and a computer on the same Wi-Fi.
 
 ### The easy way: Claude Code
 

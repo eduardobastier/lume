@@ -67,7 +67,7 @@ TVs that don't run Google TV or Android TV (Samsung, LG and others): the way is 
 
 ## The code
 
-- Java 8 language level, minSdk 31 (Android 12), targetSdk 33. No Gradle, no libraries: only the Android SDK.
+- Java 8 language level, minSdk 28 (Android 9: Mi TV Stick, Fire TV Stick; RenderNode is wrapped by Node, a Picture below Android 10; AGSL shaders and BitmapShader filtering are Android 13+ and guarded), targetSdk 33. No Gradle, no libraries: only the Android SDK.
 - The home screen is drawn by hand on one Canvas (`HomeView`); the glass and the sky are AGSL shaders (`Shaders`,
   Android 13+, with a fallback for 12). Keep it at 60 fps: no allocations in `onDraw`, no work on the UI thread.
 - `HomeMode` runs every switch as a background job (`ModeJob`) in the main process; the UI is in the `:home`

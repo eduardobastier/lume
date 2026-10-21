@@ -6,9 +6,7 @@ import android.graphics.Canvas;
 import android.graphics.Color;
 import android.graphics.LinearGradient;
 import android.graphics.Paint;
-import android.graphics.RecordingCanvas;
 import android.graphics.RectF;
-import android.graphics.RenderNode;
 import android.graphics.RuntimeShader;
 import android.graphics.Shader;
 
@@ -30,7 +28,7 @@ final class Scene {
     private final Paint flatFill = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Paint flatRim = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Paint fallback = new Paint();
-    private final RenderNode auroraNode = new RenderNode("aurora");
+    private final Node auroraNode = new Node("aurora");
     private int w = 1, h = 1, lw = 1, lh = 1;
     private float speed = 1, baseDim, dim, time;
     private boolean auroraDirty = true, imageFrost, imageGlass;
@@ -51,7 +49,7 @@ final class Scene {
             glass = null;
             liquid = null;
         }
-        auroraNode.setUseCompositingLayer(true, null);
+        auroraNode.setUseCompositingLayer(true);
         flatRim.setStyle(Paint.Style.STROKE);
         flatRim.setColor(0x33FFFFFF);
         flatRim.setStrokeWidth(1.5f);
@@ -221,7 +219,7 @@ final class Scene {
             return;
         }
         if (auroraDirty) {
-            RecordingCanvas rc = auroraNode.beginRecording(lw, lh);
+            Canvas rc = auroraNode.beginRecording(lw, lh);
             try {
                 rc.drawPaint(auroraPaint);
             } finally {
@@ -231,7 +229,7 @@ final class Scene {
         }
         c.save();
         c.scale((float) w / lw, (float) h / lh);
-        c.drawRenderNode(auroraNode);
+        auroraNode.draw(c);
         c.restore();
     }
 
