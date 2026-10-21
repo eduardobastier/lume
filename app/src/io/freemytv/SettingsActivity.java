@@ -218,7 +218,7 @@ public class SettingsActivity extends Activity {
     }
 
     static final class SettingsView extends View implements Choreographer.FrameCallback {
-        private static final int MAIN = 0, HOME_CHOICE = 1, RECS = 2, THEME = 3, SAVER = 4, WEATHER = 5, MAIN_ROWS = 8;
+        private static final int MAIN = 0, HOME_CHOICE = 1, RECS = 2, THEME = 3, SAVER = 4, WEATHER = 5, UPDATE = 6, MAIN_ROWS = 9;
         /** How long the TV waits before the screensaver (Android's screen-off timeout), in minutes. */
         private static final int[] SAVER_MINUTES = {1, 2, 5, 10, 15, 30, 60};
         /** The popup over the list: none, the theme, the genres (several at once) or what OK on a card opens. */
@@ -388,6 +388,7 @@ public class SettingsActivity extends Activity {
             if (screen == HOME_CHOICE) return Ui.tr("Início", "Home Screen");
             if (screen == SAVER) return Ui.tr("Tela de Descanso", "Screensaver");
             if (screen == WEATHER) return Ui.tr("Previsão do Tempo", "Weather");
+            if (screen == UPDATE) return Ui.tr("Atualizações", "Updates");
             return Ui.tr("Ajustes do Início", "Home Settings");
         }
 
@@ -400,7 +401,7 @@ public class SettingsActivity extends Activity {
         }
 
         private int rowCount() {
-            return screen == MAIN ? MAIN_ROWS : screen == RECS ? 5 : screen == THEME ? 3 : screen == WEATHER ? 3 : 2;
+            return screen == MAIN ? MAIN_ROWS : screen == RECS ? 5 : screen == THEME ? 3 : screen == WEATHER ? 3 : 2;   // UPDATE: 2
         }
 
         @Override protected void onDraw(Canvas c) {
@@ -429,6 +430,7 @@ public class SettingsActivity extends Activity {
             else if (screen == THEME) drawThemeScreen(c);
             else if (screen == SAVER) drawSaverScreen(c);
             else if (screen == WEATHER) drawWeatherScreen(c);
+            else if (screen == UPDATE) drawUpdateScreen(c);
             else drawChoice(c);
             if (popup != NO_POPUP) drawPopup(c, dt);
         }
@@ -439,9 +441,9 @@ public class SettingsActivity extends Activity {
             String mode = freeActive() ? "Free My TV" : Ui.tr("Original", "Original");
             String[] labels = {Ui.tr("Início", "Home Screen"), Ui.tr("Tela de Descanso", "Screensaver"), Ui.tr("Tema", "Theme"),
                     Ui.tr("Previsão do tempo", "Weather"), Ui.tr("TV ao Vivo", "Live TV"), Ui.tr("Sons ao navegar", "Navigation sounds"),
-                    Ui.tr("Recomendações", "Recommendations"), Ui.tr("Ajustes da TV", "TV Settings")};
+                    Ui.tr("Recomendações", "Recommendations"), Ui.tr("Atualizações", "Updates"), Ui.tr("Ajustes da TV", "TV Settings")};
             String[] values = {working ? "" : mode, saverName(), themes()[HomeView.theme(getContext())], weatherName(),
-                    liveName(), Prefs.sounds(getContext()) ? Ui.tr("Sim", "On") : Ui.tr("Não", "Off"), "", ""};
+                    liveName(), Prefs.sounds(getContext()) ? Ui.tr("Sim", "On") : Ui.tr("Não", "Off"), "", updateName(), ""};
             for (int i = 0; i < MAIN_ROWS; i++) {
                 float y = (LIST_TOP + i * (ROW_H + ROW_GAP)) * k;
                 rowRect.set(LIST_X * k, y, LIST_R * k, y + ROW_H * k);
@@ -599,6 +601,129 @@ public class SettingsActivity extends Activity {
                             "The TV turns off first (TV Settings → Power): the screensaver won't show.")
                     : Ui.tr("Vale para a TV toda, como nos Ajustes da TV.", "Applies to the whole TV, like TV Settings.");
             c.drawText(note, LIST_X * k + 30 * k, (LIST_TOP + 20 + 2 * (ROW_H + ROW_GAP) + 40) * k, hint);
+        }
+
+        // MARK: Updates (GitHub releases)
+
+        private Updater.Release release;          // the latest release, once checked
+        private String updateStatus = "";         // what's going on, shown on the second row
+        private boolean updateBusy;
+
+        private String updateName() {
+            if (release != null && Updater.newer(release.tag, Updater.currentVersion(getContext()))) {
+                return Ui.tr("Nova: ", "New: ") + release.tag;
+            }
+            return Updater.currentVersion(getContext());
+        }
+
+        /** Looks for a newer release (on opening the screen and when asked). */
+        private void checkUpdate() {
+            if (updateBusy || !Updater.enabled()) return;
+            updateBusy = true;
+            updateStatus = Ui.tr("Procurando…", "Checking…");
+            new Thread(() -> {
+                String status;
+                Updater.Release r = null;
+                try {
+                    r = Updater.latest();
+                    status = r == null ? Ui.tr("Nenhuma versão publicada", "No release yet")
+                            : Updater.newer(r.tag, Updater.currentVersion(getContext())) ? Ui.tr("Instalar ", "Install ") + r.tag
+                            : Ui.tr("Você já tem a mais nova", "You're up to date");
+                } catch (java.io.IOException e) {
+                    status = Ui.tr("Sem conexão com o GitHub", "Couldn't reach GitHub");
+                }
+                final Updater.Release found = r;
+                final String text = status;
+                handler.post(() -> {
+                    release = found;
+                    updateStatus = text;
+                    updateBusy = false;
+                    invalidate();
+                });
+            }).start();
+        }
+
+        /** Downloads the newer release and hands it to Android's installer (it asks before installing). */
+        private void installUpdate() {
+            final Context c = getContext().getApplicationContext();
+            if (updateBusy || release == null || !Updater.newer(release.tag, Updater.currentVersion(c))) {
+                checkUpdate();
+                return;
+            }
+            updateBusy = true;
+            final Updater.Release r = release;
+            new Thread(() -> {
+                // Android asks once to let this app install apps: done quietly with the TV's own ADB when it can.
+                if (!c.getPackageManager().canRequestPackageInstalls()) {
+                    try (Adb adb = Adb.connect(c, 10_000, null)) {
+                        adb.shell("appops set " + c.getPackageName() + " REQUEST_INSTALL_PACKAGES allow");
+                    } catch (Exception ignored) {
+                    }
+                }
+                if (!c.getPackageManager().canRequestPackageInstalls()) {
+                    handler.post(() -> {
+                        updateBusy = false;
+                        updateStatus = Ui.tr("Permita instalar apps e tente de novo", "Allow installing apps and try again");
+                        invalidate();
+                        try {
+                            activity.startActivity(new Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES,
+                                    android.net.Uri.parse("package:" + c.getPackageName())));
+                        } catch (RuntimeException e) {
+                            activity.startActivity(new Intent(Settings.ACTION_SECURITY_SETTINGS));
+                        }
+                    });
+                    return;
+                }
+                String status;
+                try {
+                    java.io.File apk = Updater.download(c, r, p -> handler.post(() -> {
+                        updateStatus = Ui.tr("Baixando… ", "Downloading… ") + p + "%";
+                        invalidate();
+                    }));
+                    handler.post(() -> {
+                        updateStatus = Ui.tr("Instalando…", "Installing…");
+                        invalidate();
+                    });
+                    Updater.install(c, apk);
+                    status = Ui.tr("Confirme na tela de instalação", "Confirm on the install screen");
+                } catch (java.io.IOException | RuntimeException e) {
+                    status = Ui.tr("Não deu para atualizar: ", "Couldn't update: ") + e.getMessage();
+                }
+                final String text = status;
+                handler.post(() -> {
+                    updateStatus = text;
+                    updateBusy = false;
+                    invalidate();
+                });
+            }).start();
+        }
+
+        private void drawUpdateScreen(Canvas c) {
+            String[] labels = {Ui.tr("Versão instalada", "Installed version"),
+                    release != null && Updater.newer(release.tag, Updater.currentVersion(getContext()))
+                            ? Ui.tr("Atualizar agora", "Update now") : Ui.tr("Procurar atualização", "Check for updates")};
+            String[] values = {Updater.currentVersion(getContext()), updateStatus};
+            for (int i = 0; i < 2; i++) {
+                float y = (LIST_TOP + 20 + i * (ROW_H + ROW_GAP)) * k;
+                rowRect.set(LIST_X * k, y, LIST_R * k, y + ROW_H * k);
+                float f = drawRowBackground(c, i);
+                rowLabel.setColor(blend(fg(0xF2FFFFFF), INK, f));
+                float base = rowRect.centerY() + Ui.halfCap(rowLabel);
+                c.drawText(labels[i], rowRect.left + 30 * k, base, rowLabel);
+                if (i == 1) {
+                    valueAndChevron(c, values[i], base, f);
+                } else {
+                    rowValue.setColor(blend(fg(0x8CFFFFFF), 0x8C1C1C1E, f));
+                    c.drawText(values[i], rowRect.right - 30 * k, base, rowValue);
+                }
+            }
+            Paint hint = Ui.text(Ui.regular, 23 * k, fg(0x8CFFFFFF));
+            String note = Updater.enabled()
+                    ? Ui.tr("Vem das releases do GitHub (" + Config.UPDATE_REPO + "). O Android pede para confirmar a instalação.",
+                            "From the GitHub releases (" + Config.UPDATE_REPO + "). Android asks you to confirm the install.")
+                    : Ui.tr("Atualizações desligadas neste APK.", "Updates are off in this APK.");
+            c.drawText(TextUtils.ellipsize(note, new TextPaint(hint), (LIST_R - LIST_X - 30) * k, TextUtils.TruncateAt.END).toString(),
+                    LIST_X * k + 30 * k, (LIST_TOP + 20 + 2 * (ROW_H + ROW_GAP) + 40) * k, hint);
         }
 
         private String weatherName() {
@@ -936,7 +1061,8 @@ public class SettingsActivity extends Activity {
                         if (e.getRepeatCount() == 0) backDown = true;
                     } else {
                         if (backDown && !e.isCanceled()) {
-                            focus = screen == RECS ? 6 : screen == THEME ? 2 : screen == SAVER ? 1 : screen == WEATHER ? 3 : 0;
+                            focus = screen == RECS ? 6 : screen == THEME ? 2 : screen == SAVER ? 1 : screen == WEATHER ? 3
+                                    : screen == UPDATE ? 7 : 0;
                             screen = MAIN;
                         }
                         backDown = false;
@@ -1046,6 +1172,10 @@ public class SettingsActivity extends Activity {
                 }
                 screen = MAIN;
                 focus = 0;
+            } else if (screen == UPDATE) {
+                if (focus == 1) installUpdate();
+                invalidate();
+                return;
             } else if (screen == WEATHER) {
                 if (focus == 0) openYesNo("weather", Ui.tr("Mostrar previsão", "Show weather"));
                 else if (focus == 1) openPopup(PLACE_POPUP);
@@ -1090,6 +1220,10 @@ public class SettingsActivity extends Activity {
             } else if (focus == 6) {
                 screen = RECS;
                 focus = 0;
+            } else if (focus == 7) {
+                screen = UPDATE;
+                focus = 1;
+                checkUpdate();
             } else {
                 activity.startActivity(new Intent(Settings.ACTION_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
             }

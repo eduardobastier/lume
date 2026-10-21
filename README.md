@@ -15,7 +15,7 @@ Open source. Built with Claude Code. One button to undo.
 
 </div>
 
-## Novidades desta versão (my-tv 1.1)
+## Novidades desta versão (my-tv 1.2)
 
 Adaptada e testada numa TCL Google TV com **Android 12**, com tudo configurável na própria TV em **Ajustes do Início** (visual dos Ajustes da Apple TV, claro ou escuro):
 
@@ -28,6 +28,7 @@ Adaptada e testada numa TCL Google TV com **Android 12**, com tudo configurável
 - **TV ao Vivo** abre a TV a cabo no HDMI (ou a antena), ou o app que você escolher.
 - **Tela de descanso** com os mesmos títulos dos cards e tempo de espera ajustável (1 min a 1 h).
 - **Chave do TMDB digitada na TV**, para um APK servir em qualquer TV; **sons de navegação** opcionais; cotações de cripto opcionais (`show_prices`).
+- **Atualização pelo GitHub (OTA):** *Ajustes do Início → Atualizações* procura a release mais nova, baixa o APK e chama o instalador do Android.
 - Correções para Android 12: tela de descanso que fechava sozinha, troca da tela inicial, sintonizador certo na TV ao Vivo, e animações sem travar (sombras pré-desenhadas).
 
 **APK pronto:** veja a página de *Releases*. Ele não traz chave do TMDB: coloque a sua em *Ajustes do Início → Recomendações → Chave do TMDB*. O app é só Java, então o mesmo APK roda em TVs arm64 e arm (32 bits), a partir do Android 9 (inclui Mi TV Stick e Fire TV Stick).

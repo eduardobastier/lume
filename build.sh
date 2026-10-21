@@ -54,6 +54,7 @@ final class Config {
     static final String TMDB_KEY = "$(prop tmdb_key '')";
     static final String YOUTUBE_KEY = "$(prop youtube_key '')";
     static final String RECS_GENRES = "$(prop recs_genres '')";
+    static final String UPDATE_REPO = "$(prop update_repo eduardobastier/my-tv)";
     static final String TMDB_REGION = "$(prop tmdb_region US)";
     static final String LATITUDE = "$LAT";
     static final String LONGITUDE = "$LON";
