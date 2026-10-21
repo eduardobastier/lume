@@ -77,6 +77,13 @@ TVs that don't run Google TV or Android TV (Samsung, LG and others): the way is 
 - Settings come from `config.properties` through the generated `out/gen/io/freemytv/Config.java` (never edit that).
 - After any change, `./build.sh` must end with `Built FreeMyTV.apk`.
 
+## Branches (eduardobastier/my-tv)
+
+- Work happens on `dev`; commit and push there.
+- `main` is for releases only: merge `dev` into `main` when publishing a version (bump versionCode/versionName,
+  build the APK with an empty `tmdb_key`, tag `vX.Y` on `main` and attach the APK to the GitHub release; the TVs'
+  over-the-air update reads the latest release).
+
 ## Always
 
 - Never commit `config.properties`, `*.keystore` or any key.
