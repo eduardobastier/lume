@@ -195,6 +195,11 @@ final class Scene {
         advance(time);
     }
 
+    /** False below Android 13: the glass is flat and doesn't read the background, so a new photo doesn't redraw it. */
+    boolean hasShaders() {
+        return glass != null;
+    }
+
     /** The current blurred image (so the bottom drawer can blur the background), or null with the aurora. */
     Bitmap frostImage() {
         return imageFrost ? frostImage : null;

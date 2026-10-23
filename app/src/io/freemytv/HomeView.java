@@ -7,8 +7,10 @@ import android.graphics.Bitmap;
 import android.graphics.BlurMaskFilter;
 import android.graphics.Canvas;
 import android.graphics.LinearGradient;
+import android.graphics.Matrix;
 import android.graphics.Paint;
 import android.graphics.Path;
+import android.graphics.Rect;
 import android.graphics.RectF;
 import android.graphics.Shader;
 import android.media.tv.TvInputManager;
@@ -20,6 +22,7 @@ import android.text.Layout;
 import android.text.StaticLayout;
 import android.text.TextPaint;
 import android.text.TextUtils;
+import android.util.LongSparseArray;
 import android.view.Choreographer;
 import android.view.KeyEvent;
 import android.view.View;
@@ -487,6 +490,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         lTitle.setLetterSpacing(0.004f);
         lTab = Ui.text(Ui.medium, 30 * k, L_DIM);
         lTabOn = Ui.text(Ui.semibold, 30 * k, L_INK);
+        java.util.Arrays.fill(cardTextPick, null);
         lCardTitle = Ui.text(Ui.semibold, 31 * k, L_INK);
         lCardTitle.setLetterSpacing(0.012f);
         lCardMeta = Ui.text(Ui.medium, 25 * k, L_DIM);
@@ -565,14 +569,16 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         // drop frames (measured: ~50 ms of GPU per frame). The app tiles have no glass; the top buttons fade out as
         // they rise; the drawer is drawn resting in place; the glass shelf is redrawn once the drawer stops, so the
         // glass shows the background where it ended up.
+        // A new background photo only changes the glass layers when the glass is a shader that shows it.
+        boolean glassFading = bgFading && scene.hasShaders();
         if (tilesMoving || tilesDirty) tiles.invalidate();
-        if (statusMoving || statusDirty || bgFading) status.invalidate();
+        if (statusMoving || statusDirty || glassFading) status.invalidate();
         if (heroMoving || heroDirty || heroFading || cardsFading()) heroLayer.invalidate();
-        if (drawerDirty || bgFading) weatherStale = true;
-        if (drawerItemsMoving || drawerDirty || bgFading) drawerLayer.invalidate();
+        if (drawerDirty || glassFading) weatherStale = true;
+        if (drawerItemsMoving || drawerDirty || glassFading) drawerLayer.invalidate();
         if (gridMoving || gridDirty) sheetLayer.invalidate();
         if (drawerMoving || bgFading) sky.invalidate();
-        if (bgFading || (drawerWasMoving && !drawerMoving)) platter.invalidate();
+        if (glassFading || (drawerWasMoving && !drawerMoving)) platter.invalidate();
         drawerWasMoving = drawerMoving;
         tilesDirty = statusDirty = heroDirty = drawerDirty = gridDirty = motionDirty = false;
         if (updateClock()) {
@@ -592,33 +598,65 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
     }
 
     // Soft shadows, blurred once into a bitmap and then only stretched: a BlurMaskFilter is blurred again on the CPU
-    // every frame its size changes (a growing focused tile), which took ~15 ms per frame on the TV.
-    private final Map<String, Bitmap> shadows = new HashMap<>();
+    // every frame its size changes (a growing focused tile), which took ~15 ms per frame on the TV. The bitmap is drawn
+    // in nine slices (the corners as they are, the edges stretched), so one bitmap serves every size with the same
+    // radius and blur, and nothing new gets blurred in the middle of an animation.
+    private final LongSparseArray<Bitmap> shadows = new LongSparseArray<>();
     private final Paint shadowPaint = new Paint(Paint.FILTER_BITMAP_FLAG);
+    private final Rect shadowSrc = new Rect();
+    private final RectF shadowDst = new RectF();
+    private final int[] shadowSx = new int[4], shadowSy = new int[4];
+    private final float[] shadowDx = new float[4], shadowDy = new float[4];
 
     private void drawShadow(Canvas c, RectF rect, float radius, float blur, int color) {
         if (rect.width() <= 1 || rect.height() <= 1 || (color >>> 24) == 0) return;
-        int qw = Math.max(16, Math.round(rect.width() / 16) * 16), qh = Math.max(16, Math.round(rect.height() / 16) * 16);
         int qr = Math.round(radius / 4) * 4, qb = Math.max(1, Math.round(blur));
-        String key = qw + "x" + qh + "r" + qr + "b" + qb;
+        int pad = qb * 2, inner = qr + qb * 2, edge = 2 * inner + 3;
+        // An axis shorter than its two corners (a circle, a pill) can't be sliced: that axis is drawn at its own size.
+        boolean sliceW = rect.width() >= 2 * inner, sliceH = rect.height() >= 2 * inner;
+        int bw = sliceW ? edge : Math.max(8, Math.round(rect.width() / 8) * 8);
+        int bh = sliceH ? edge : Math.max(8, Math.round(rect.height() / 8) * 8);
+        long key = ((long) bw << 48) | ((long) bh << 32) | ((long) qr << 16) | qb;
         Bitmap b = shadows.get(key);
-        int pad = qb * 2;
         if (b == null) {
-            if (shadows.size() > 48) shadows.clear();
-            b = Bitmap.createBitmap(qw + 2 * pad, qh + 2 * pad, Bitmap.Config.ALPHA_8);
+            if (shadows.size() > 64) shadows.clear();
+            b = Bitmap.createBitmap(bw + 2 * pad, bh + 2 * pad, Bitmap.Config.ALPHA_8);
             Canvas sc = new Canvas(b);
             Paint p = new Paint(Paint.ANTI_ALIAS_FLAG);
             p.setMaskFilter(new BlurMaskFilter(qb, BlurMaskFilter.Blur.NORMAL));
-            sc.drawRoundRect(new RectF(pad, pad, pad + qw, pad + qh), qr, qr, p);
+            sc.drawRoundRect(new RectF(pad, pad, pad + bw, pad + bh), qr, qr, p);
             shadows.put(key, b);
         }
-        float sx = rect.width() / qw, sy = rect.height() / qh;
-        shadowRect.set(rect.left - pad * sx, rect.top - pad * sy, rect.right + pad * sx, rect.bottom + pad * sy);
         shadowPaint.setColor(color);
-        c.drawBitmap(b, null, shadowRect, shadowPaint);
+        float sx = sliceW ? 1 : rect.width() / bw, sy = sliceH ? 1 : rect.height() / bh;
+        int nx = spans(shadowSx, shadowDx, sliceW, b.getWidth(), pad + inner, rect.left - pad * sx, rect.right + pad * sx);
+        int ny = spans(shadowSy, shadowDy, sliceH, b.getHeight(), pad + inner, rect.top - pad * sy, rect.bottom + pad * sy);
+        for (int y = 0; y < ny; y++) {
+            for (int x = 0; x < nx; x++) {
+                shadowSrc.set(shadowSx[x], shadowSy[y], shadowSx[x + 1], shadowSy[y + 1]);
+                shadowDst.set(shadowDx[x], shadowDy[y], shadowDx[x + 1], shadowDy[y + 1]);
+                c.drawBitmap(b, shadowSrc, shadowDst, shadowPaint);
+            }
+        }
     }
 
-    private final RectF shadowRect = new RectF();
+    /** Edges of the slices along one axis: corner, middle, corner (3 spans), or the whole bitmap stretched (1). */
+    private static int spans(int[] src, float[] dst, boolean slice, int size, int corner, float from, float to) {
+        src[0] = 0;
+        dst[0] = from;
+        if (!slice) {
+            src[1] = size;
+            dst[1] = to;
+            return 1;
+        }
+        src[1] = corner;
+        src[2] = size - corner;
+        src[3] = size;
+        dst[1] = from + corner;
+        dst[2] = to - corner;
+        dst[3] = to;
+        return 3;
+    }
 
     private static boolean step(Spring[] springs, float dt) {
         boolean moving = false;
@@ -884,7 +922,8 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
     private boolean tickBackgroundFade(long up) {
         if (bgFadeAt == 0) return false;
         float e = fadeEase(bgFadeAt, up);
-        if (bgTo != null && bgFrom != null && glassOf(bgFrom) != null && glassOf(bgTo) != null) {
+        // The glass blends the two photos only with shaders; the flat glass doesn't need the per-frame CPU blend.
+        if (scene.hasShaders() && bgTo != null && bgFrom != null && glassOf(bgFrom) != null && glassOf(bgTo) != null) {
             int[] from = frostOf(bgFrom), to = frostOf(bgTo);
             for (int i = 0; i < frostMix.length; i++) frostMix[i] = mix(from[i], to[i], e);
             scene.setFrost(frostMix);
@@ -1158,7 +1197,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         // (white letters turn dark on the light tile).
         if (it.logo != null) style = night < 0.5f && it.logoDark != null ? LIGHT_TILE : DARK_TILE;
         if (it.logo != null && style != null) {
-            tileFill.setShader(new LinearGradient(0, cell.top, 0, cell.bottom, style[0], style[1], Shader.TileMode.CLAMP));
+            tileFill.setShader(tileGradient(style, cell));
             c.drawRoundRect(cell, r, r, tileFill);
             tileFill.setShader(null);
             if (fc > 0.01f) {
@@ -1181,6 +1220,22 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
             if (it.tile != null) c.drawBitmap(it.tile, null, cell, bitmapPaint);
             c.restore();
         }
+    }
+
+    // One gradient per tile style, placed on the tile by its matrix: no new shader per tile on every frame.
+    private final Map<int[], LinearGradient> tileGradients = new HashMap<>();
+    private final Matrix tileMatrix = new Matrix();
+
+    private Shader tileGradient(int[] style, RectF r) {
+        LinearGradient g = tileGradients.get(style);
+        if (g == null) {
+            g = new LinearGradient(0, 0, 0, 1, style[0], style[1], Shader.TileMode.CLAMP);
+            tileGradients.put(style, g);
+        }
+        tileMatrix.setScale(1, r.height());
+        tileMatrix.postTranslate(0, r.top);
+        g.setLocalMatrix(tileMatrix);
+        return g;
     }
 
     /**
@@ -1393,7 +1448,8 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         float room = cell.width() - 16 * k, wide = drawerLabel.measureText(it.label);
         // A long name ("Home Settings", an input you renamed) shrinks a little before it gets cut.
         if (wide > room) drawerLabel.setTextSize(Math.max(18 * k * s, 23 * k * s * room / wide));
-        String label = TextUtils.ellipsize(it.label, new TextPaint(drawerLabel), room, TextUtils.TruncateAt.END).toString();
+        measurePaint.set(drawerLabel);
+        String label = TextUtils.ellipsize(it.label, measurePaint, room, TextUtils.TruncateAt.END).toString();
         c.drawText(label, cx, cell.top + cell.height() * 0.8f, drawerLabel);
         drawerLabel.setTextSize(23 * k);
     }
@@ -2228,6 +2284,10 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
      * a soft shadow; when focused, it grows 5%, rises and lights up its border. Below it, the title (and on the large
      * card, genre · runtime · service).
      */
+    private final Recs.Pick[] cardTextPick = new Recs.Pick[3];
+    private final String[] cardTitleText = new String[3], cardMetaText = new String[3];
+    private final TextPaint measurePaint = new TextPaint();
+
     private void drawLightCard(Canvas c, int i) {
         RectF base = cardRects[i];
         Recs.Pick p = i < cards.size() ? cards.get(i) : null;
@@ -2306,12 +2366,19 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
             c.drawRoundRect(cell, r, r, rim);
         }
         if (p == null) return;
-        TextPaint tp = new TextPaint(lCardTitle);
-        c.drawText(TextUtils.ellipsize(p.title, tp, bw, TextUtils.TruncateAt.END).toString(), base.left, base.bottom + 46 * k, lCardTitle);
-        if (i == 0 && p.meta != null && !p.meta.isEmpty()) {
-            TextPaint mp = new TextPaint(lCardMeta);
-            c.drawText(TextUtils.ellipsize(p.meta, mp, bw, TextUtils.TruncateAt.END).toString(), base.left, base.bottom + 80 * k, lCardMeta);
+        // Cut to fit once per title, not on every frame of a fade or a focus move.
+        if (cardTextPick[i] != p) {
+            cardTextPick[i] = p;
+            measurePaint.set(lCardTitle);
+            cardTitleText[i] = TextUtils.ellipsize(p.title, measurePaint, bw, TextUtils.TruncateAt.END).toString();
+            cardMetaText[i] = null;
+            if (i == 0 && p.meta != null && !p.meta.isEmpty()) {
+                measurePaint.set(lCardMeta);
+                cardMetaText[i] = TextUtils.ellipsize(p.meta, measurePaint, bw, TextUtils.TruncateAt.END).toString();
+            }
         }
+        c.drawText(cardTitleText[i], base.left, base.bottom + 46 * k, lCardTitle);
+        if (cardMetaText[i] != null) c.drawText(cardMetaText[i], base.left, base.bottom + 80 * k, lCardMeta);
     }
 
     /**
