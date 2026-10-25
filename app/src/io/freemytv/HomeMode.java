@@ -381,8 +381,8 @@ final class HomeMode {
     }
 
     /**
-     * Fire TV whose ADB the app can't use: the mode only switches HomeButton on or off (it acts in Free My TV mode
-     * alone), which you turn on yourself once in Accessibility. Nothing is turned off, and the screensaver is ours
+     * Fire TV (the app never uses its ADB): the mode only switches HomeButton on or off (it acts in Free My TV mode
+     * alone), which is turned on once with HomeButton.ENABLE_COMMAND. Nothing is turned off, and the screensaver is ours
      * through IdleSaver. Original: Amazon's home screen is back right away, the service just stays idle.
      */
     private static void switchWithoutAdb(Context c, String mode) {
@@ -392,14 +392,14 @@ final class HomeMode {
             save(c, s);
         } catch (JSONException ignored) {}
         if (FREE.equals(mode)) {
-            notice(c, Ui.tr("Free My TV ligado sem ADB: ative “Free My TV” em Acessibilidade para o botão Home abrir o novo Início.",
-                    "Free My TV is on without ADB: turn on “Free My TV” in Accessibility so Home opens the new home screen."));
-            done(c, null);
-            try {
-                c.startActivity(new android.content.Intent(android.provider.Settings.ACTION_ACCESSIBILITY_SETTINGS)
-                        .addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK));
-            } catch (RuntimeException e) {
-                AppLog.w("no accessibility settings: " + e.getMessage());
+            if (HomeButton.enabled(c)) {
+                notice(c, Ui.tr("Free My TV ligado: o botão Home abre o novo Início.", "Free My TV is on: Home opens the new home screen."));
+                done(c, null);
+            } else {
+                // Fire OS doesn't list other apps' services in Accessibility: it takes one command from an ADB app
+                // (ATV Tools) or a computer. Shown as the switch's message until it's done.
+                done(c, Ui.tr("Falta ativar o botão Home: rode no ATV Tools (ou no computador) ",
+                        "One step left for the Home button: run in ATV Tools (or from a computer) ") + HomeButton.ENABLE_COMMAND);
             }
         } else {
             notice(c, Ui.tr("Modo original: o Início da Amazon está de volta.", "Original mode: Amazon's home screen is back."));

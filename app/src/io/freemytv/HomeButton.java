@@ -17,8 +17,8 @@ import android.view.accessibility.AccessibilityEvent;
  * - takes the Home key and opens ours. Letting Home through and opening ours after Amazon's showed it only 4 to 6 s
  *   later: Android holds back apps opening for 5 s after Home. (So holding Home no longer opens Fire OS's quick menu;
  *   its settings are still in our home screen's settings button.)
- * - as a fallback (boot, Amazon's screen opened some other way), opens ours when Amazon's shows up (packageNames in
- *   res/xml/home_button.xml).
+ * - as a fallback (boot, Amazon's screen opened some other way), opens ours when Amazon's shows up (the
+ *   known package, or whatever Home resolves to on this model).
  * - on Fire TV, where only Amazon's screensaver may be the system's, opens ours (IdleSaver) after IDLE_MS without a
  *   key and with nothing playing; 4 min, so it comes before Amazon's (5 min by default).
  * It reads nothing on the screen; other keys are only timed, never kept. HomeMode turns it on and off with the mode
@@ -44,6 +44,17 @@ public class HomeButton extends AccessibilityService {
         }
     };
 
+    /** Turns this service on (Fire OS has no switch for it in Accessibility): run from ATV Tools or adb shell. */
+    static final String ENABLE_COMMAND = "settings put secure enabled_accessibility_services " + COMPONENT
+            + " && settings put secure accessibility_enabled 1";
+
+    /** Whether this service is on (apps may read the list). */
+    static boolean enabled(Context c) {
+        String list = android.provider.Settings.Secure.getString(c.getContentResolver(),
+                android.provider.Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES);
+        return list != null && java.util.Arrays.asList(list.split(":")).contains(COMPONENT);
+    }
+
     static boolean fireTv() {
         return "Amazon".equalsIgnoreCase(Build.MANUFACTURER);
     }
@@ -67,8 +78,21 @@ public class HomeButton extends AccessibilityService {
 
     @Override public void onAccessibilityEvent(AccessibilityEvent e) {
         if (e.getEventType() != AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) return;
-        if (e.getPackageName() == null || !AMAZON_HOME.contentEquals(e.getPackageName())) return;
+        if (e.getPackageName() == null || !amazonHome(e.getPackageName().toString())) return;
         if (free()) openHome();
+    }
+
+    /** Amazon's home screen: the known package, or whatever the system opens for Home on this model. */
+    private String resolvedHome;
+
+    private boolean amazonHome(String pkg) {
+        if (pkg.equals(AMAZON_HOME)) return true;
+        if (resolvedHome == null) {
+            android.content.pm.ResolveInfo r = getPackageManager().resolveActivity(new Intent(Intent.ACTION_MAIN)
+                    .addCategory(Intent.CATEGORY_HOME), android.content.pm.PackageManager.MATCH_DEFAULT_ONLY);
+            resolvedHome = r != null && r.activityInfo != null ? r.activityInfo.packageName : "";
+        }
+        return pkg.equals(resolvedHome) && !pkg.equals(getPackageName()) && !pkg.equals("android");
     }
 
     private boolean free() {

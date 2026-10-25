@@ -66,6 +66,9 @@ final class Adb implements Closeable {
 
     /** Connects and authenticates. If the TV doesn't know our key yet, waits up to `approvalMs` for you to accept. */
     static Adb connect(Context c, int approvalMs, Approval approval) throws IOException {
+        // Fire TV: never. Fire OS refuses the app's key anyway, and even trying cut off other ADB apps (ATV Tools).
+        // Free My TV works there through Accessibility alone (HomeButton).
+        if (HomeButton.fireTv()) throw new IOException("Fire TV: the app doesn't use ADB here");
         KeyPair keys = keys(c);
         Socket s = new Socket();
         try {
