@@ -61,6 +61,7 @@ public class HomeButton extends AccessibilityService {
 
     @Override protected void onServiceConnected() {
         super.onServiceConnected();
+        AppLog.w("home button: service connected");
         if (fireTv()) handler.postDelayed(idleCheck, IDLE_MS);
     }
 
@@ -71,6 +72,7 @@ public class HomeButton extends AccessibilityService {
 
     @Override protected boolean onKeyEvent(KeyEvent e) {
         lastKey = SystemClock.uptimeMillis();
+        if (e.getKeyCode() == KeyEvent.KEYCODE_HOME) AppLog.w("home button: Home key " + (e.getAction() == KeyEvent.ACTION_DOWN ? "down" : "up") + ", free=" + free());
         if (e.getKeyCode() != KeyEvent.KEYCODE_HOME || !free()) return false;
         if (e.getAction() == KeyEvent.ACTION_UP && !e.isCanceled()) openHome();
         return true;
@@ -79,6 +81,7 @@ public class HomeButton extends AccessibilityService {
     @Override public void onAccessibilityEvent(AccessibilityEvent e) {
         if (e.getEventType() != AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) return;
         if (e.getPackageName() == null || !amazonHome(e.getPackageName().toString())) return;
+        AppLog.w("home button: Amazon's home screen showed up (" + e.getClassName() + "), free=" + free());
         if (free()) openHome();
     }
 
@@ -100,8 +103,10 @@ public class HomeButton extends AccessibilityService {
     }
 
     private void openHome() {
+        AppLog.w("home button: opening Free My TV");
         try {
-            startActivity(new Intent(this, HomeActivity.class).addCategory(Intent.CATEGORY_HOME)
+            // No CATEGORY_HOME: Fire OS sends home intents to Amazon's launcher whatever their target.
+            startActivity(new Intent(this, HomeActivity.class)
                     .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED));
         } catch (RuntimeException ex) {
             AppLog.w("could not open the home screen over Amazon's: " + ex.getMessage());

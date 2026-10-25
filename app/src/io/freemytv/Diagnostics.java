@@ -99,7 +99,21 @@ final class Diagnostics {
             section(b, adb, "Crashes", "logcat -d -b crash -v time");
             section(b, adb, "Log (everything since boot or as far back as the TV keeps)", "logcat -d -b main,system,events -v time");
         } catch (IOException e) {
-            b.append("== ADB unavailable: ").append(e).append('\n');
+            b.append("== ADB unavailable: ").append(e).append("\n\n");
+            // Without ADB, the app may still read its own log (its processes only).
+            b.append("== This app's log\n");
+            try {
+                Process p = Runtime.getRuntime().exec(new String[] {"logcat", "-d", "-v", "time"});
+                java.io.ByteArrayOutputStream out = new java.io.ByteArrayOutputStream();
+                byte[] buf = new byte[8192];
+                int n;
+                try (java.io.InputStream in = p.getInputStream()) {
+                    while ((n = in.read(buf)) > 0) out.write(buf, 0, n);
+                }
+                b.append(out.toString("UTF-8"));
+            } catch (IOException ex) {
+                b.append("(failed: ").append(ex).append(")\n");
+            }
         }
         return b.toString();
     }
