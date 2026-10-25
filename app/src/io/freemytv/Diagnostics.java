@@ -13,33 +13,45 @@ import java.nio.charset.StandardCharsets;
 /**
  * Settings → Updates → Send diagnostics: for a TV that isn't in front of you. Gathers what decides whether the
  * screensaver starts and the clicks are heard (system settings, dream and power state, audio volumes and routing) plus
- * the recent log, and sends it as a text file to the ntfy.sh topic in config.properties (diag_topic), read in the ntfy
- * app. No keys or passwords: the TMDB/YouTube keys never go in, and the log never has them (see AppLog).
+ * the TV's full log (all buffers, crashes included), and sends it as a file to the Telegram chat in config.properties
+ * (telegram_bot_token, telegram_chat_id). The TMDB/YouTube keys never go in, and the app's log never has them.
  */
 final class Diagnostics {
     private Diagnostics() {}
 
     static boolean enabled() {
-        return !Config.DIAG_TOPIC.isEmpty();
+        return !Config.TELEGRAM_TOKEN.isEmpty() && !Config.TELEGRAM_CHAT.isEmpty();
     }
 
     /** Collects and sends (on a background thread). Throws with a short reason if it couldn't be sent. */
     static void send(Context c) throws IOException {
-        byte[] body = collect(c).getBytes(StandardCharsets.UTF_8);
-        HttpURLConnection http = (HttpURLConnection) new URL("https://ntfy.sh/" + Config.DIAG_TOPIC).openConnection();
+        byte[] file = collect(c).getBytes(StandardCharsets.UTF_8);
+        String boundary = "freemytv" + System.nanoTime();
+        String name = "freemytv-" + Build.MODEL.replaceAll("[^\\w-]", "_") + "-" + System.currentTimeMillis() / 1000 + ".txt";
+        String caption = "Free My TV " + Updater.currentVersion(c) + " · " + Build.MANUFACTURER + " " + Build.MODEL
+                + " · Android " + Build.VERSION.RELEASE;
+        String head = "--" + boundary + "\r\nContent-Disposition: form-data; name=\"chat_id\"\r\n\r\n" + Config.TELEGRAM_CHAT
+                + "\r\n--" + boundary + "\r\nContent-Disposition: form-data; name=\"caption\"\r\n\r\n" + caption
+                + "\r\n--" + boundary + "\r\nContent-Disposition: form-data; name=\"document\"; filename=\"" + name
+                + "\"\r\nContent-Type: text/plain; charset=utf-8\r\n\r\n";
+        byte[] start = head.getBytes(StandardCharsets.UTF_8);
+        byte[] end = ("\r\n--" + boundary + "--\r\n").getBytes(StandardCharsets.UTF_8);
+        HttpURLConnection http = (HttpURLConnection) new URL("https://api.telegram.org/bot" + Config.TELEGRAM_TOKEN
+                + "/sendDocument").openConnection();
         try {
-            http.setRequestMethod("PUT");
+            http.setRequestMethod("POST");
             http.setDoOutput(true);
             http.setConnectTimeout(10_000);
-            http.setReadTimeout(30_000);
-            http.setFixedLengthStreamingMode(body.length);
-            http.setRequestProperty("Title", "Free My TV: " + Build.MANUFACTURER + " " + Build.MODEL);
-            http.setRequestProperty("Filename", "freemytv-" + Build.MODEL.replaceAll("[^\\w-]", "_") + ".txt");
+            http.setReadTimeout(60_000);
+            http.setFixedLengthStreamingMode(start.length + file.length + end.length);
+            http.setRequestProperty("Content-Type", "multipart/form-data; boundary=" + boundary);
             try (OutputStream out = http.getOutputStream()) {
-                out.write(body);
+                out.write(start);
+                out.write(file);
+                out.write(end);
             }
             int code = http.getResponseCode();
-            if (code / 100 != 2) throw new IOException("ntfy answered " + code);
+            if (code / 100 != 2) throw new IOException("Telegram answered " + code);
         } finally {
             http.disconnect();
         }
@@ -77,7 +89,8 @@ final class Diagnostics {
             section(b, adb, "Power", "dumpsys power | grep -iE 'dream|timeout|wakefulness|stayon|userActivity|wake lock|PARTIAL|FULL|SCREEN' | head -80");
             section(b, adb, "Dream services", "cmd package query-services --brief -a android.service.dreams.DreamService");
             section(b, adb, "Audio", "dumpsys audio | grep -iE 'stream_(music|system)|alias|devices|fixed|hdmi|output|mute' | head -80");
-            section(b, adb, "Log", "logcat -d -v time -t 1500 | grep -iE 'FreeMyTV|freemytv|dream|AndroidRuntime|SoundPool|AudioTrack|AudioFlinger' | tail -300");
+            section(b, adb, "Crashes", "logcat -d -b crash -v time");
+            section(b, adb, "Log (everything since boot or as far back as the TV keeps)", "logcat -d -b main,system,events -v time");
         } catch (IOException e) {
             b.append("== ADB unavailable: ").append(e.getMessage()).append('\n');
         }

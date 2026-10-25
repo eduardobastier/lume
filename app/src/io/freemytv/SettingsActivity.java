@@ -735,7 +735,7 @@ public class SettingsActivity extends Activity {
         private String diagStatus = "";
         private boolean diagBusy;
 
-        /** Sends the TV's screensaver/sound state and the log to the developer's ntfy topic (see Diagnostics). */
+        /** Sends the TV's screensaver/sound state and the full log to the developer's Telegram (see Diagnostics). */
         private void sendDiagnostics() {
             if (diagBusy) return;
             diagBusy = true;

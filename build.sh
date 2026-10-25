@@ -56,7 +56,8 @@ final class Config {
     static final String RECS_GENRES = "$(prop recs_genres '')";
     static final String UPDATE_REPO = "$(prop update_repo eduardobastier/my-tv)";
     static final String TMDB_REGION = "$(prop tmdb_region US)";
-    static final String DIAG_TOPIC = "$(prop diag_topic '')";
+    static final String TELEGRAM_TOKEN = "$(prop telegram_bot_token '')";
+    static final String TELEGRAM_CHAT = "$(prop telegram_chat_id '')";
     static final String LATITUDE = "$LAT";
     static final String LONGITUDE = "$LON";
     static final String CITY = "$(prop city '')";
