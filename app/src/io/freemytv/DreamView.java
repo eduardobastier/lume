@@ -258,8 +258,12 @@ final class DreamView extends View implements Choreographer.FrameCallback, HomeD
     private void prepareNext() {
         if (!running || decoding || prepared != null) return;
         List<Recs.Pick> list = recs.showcase();
-        if (list.isEmpty()) return;
         Slide last = incoming != null ? incoming : current;
+        if (list.isEmpty() && !Recs.hasKey(getContext())) {
+            prepareWallpaper(last);
+            return;
+        }
+        if (list.isEmpty()) return;
         int start = 0;
         if (last != null) {
             for (int i = 0; i < list.size(); i++) {
@@ -289,6 +293,35 @@ final class DreamView extends View implements Choreographer.FrameCallback, HomeD
             prepareNext();
             return;
         }
+        decode(pick, file);
+    }
+
+    /**
+     * Recommendations off: the wallpaper for now (Wallpapers.current, its own choice or the home screen's), without a
+     * caption. The same image again keeps showing (with a different motion) until its period ends.
+     */
+    private void prepareWallpaper(Slide last) {
+        Wallpapers.syncIfStale(getContext(), false, null);
+        File file = Wallpapers.current(getContext(), true);
+        if (file == null) {
+            if (current == null) fallback = true;
+            return;
+        }
+        Recs.Pick pick = new Recs.Pick();
+        pick.kind = "wallpaper";
+        pick.id = (file.getName() + file.lastModified()).hashCode();
+        if (failed.contains(Recs.key(pick))) {
+            if (current == null) fallback = true;
+            return;
+        }
+        if (last != null && Recs.key(pick).equals(Recs.key(last.pick))) {
+            prepared = newSlide(pick, last.image, last.frost, last.lightCaption, last.lightClock);
+            return;
+        }
+        decode(pick, file);
+    }
+
+    private void decode(Recs.Pick pick, File file) {
         decoding = true;
         final int gen = generation;
         final Recs.Pick chosen = pick;
@@ -674,6 +707,7 @@ final class DreamView extends View implements Choreographer.FrameCallback, HomeD
         try {
             float x = MARGIN * k, metaBase = META_BASE * k, titleBase = metaBase - 58 * k;
             String title = s.pick.title == null ? "" : s.pick.title;
+            if (title.isEmpty()) return;    // a wallpaper: no caption
             StaticLayout t = StaticLayout.Builder.obtain(title, 0, title.length(), titlePaint, Math.round(TITLE_W * k))
                     .setMaxLines(2).setEllipsize(TextUtils.TruncateAt.END).setAlignment(Layout.Alignment.ALIGN_NORMAL)
                     .setIncludePad(false).build();

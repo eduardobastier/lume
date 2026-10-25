@@ -171,6 +171,7 @@ final class Recs {
     }
 
     static boolean hasKey(Context c) {
+        if (!Prefs.recsOn(c)) return false;     // turned off in Home Settings: the wallpapers instead
         return youtube() || !Prefs.tmdbKey(c).isEmpty();
     }
 

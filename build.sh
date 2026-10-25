@@ -55,6 +55,8 @@ final class Config {
     static final String YOUTUBE_KEY = "$(prop youtube_key '')";
     static final String RECS_GENRES = "$(prop recs_genres '')";
     static final String UPDATE_REPO = "$(prop update_repo eduardobastier/my-tv)";
+    static final String WALLPAPER_REPO = "$(prop wallpaper_repo eduardobastier/my-tv-wallpapers)";
+    static final String WALLPAPER_PATH = "$(prop wallpaper_path wallpapers)";
     static final String TMDB_REGION = "$(prop tmdb_region US)";
     static final String TELEGRAM_TOKEN = "$(prop telegram_bot_token '')";
     static final String TELEGRAM_CHAT = "$(prop telegram_chat_id '')";

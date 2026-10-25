@@ -76,6 +76,23 @@ final class Prefs {
     }
 
     /** Weather on the home screen, in the drawer and on the screensaver (the sunset still sets the theme). */
+    /** The recommendations (cards and their photos). Off: the home screen and the screensaver use the wallpapers. */
+    static boolean recsOn(Context c) {
+        return ui(c).getBoolean("recs_on", true);
+    }
+
+    /**
+     * Wallpaper choice: "every:<minutes>" (rotates through the images) or "fixed:<image name>"; for the screensaver also
+     * "same" (whatever the home screen shows).
+     */
+    static String wallpaper(Context c, boolean saver) {
+        return ui(c).getString(saver ? "wp_saver" : "wp_home", saver ? "same" : "every:60");
+    }
+
+    static void setWallpaper(Context c, boolean saver, String value) {
+        ui(c).edit().putString(saver ? "wp_saver" : "wp_home", value).apply();
+    }
+
     static boolean showWeather(Context c) {
         return ui(c).getBoolean("weather", true);
     }

@@ -53,8 +53,17 @@ final class Backdrop {
         return make(src, null, forLight);
     }
 
+    /** A wallpaper (recommendations off): like the light design, keeping the sharp photo to show as is. */
+    static Backdrop wallpaper(Bitmap src) {
+        return make(src, null, true, true);
+    }
+
     /** With a cover (the poster), the tall cards show it instead of a slice of the photo. */
     static Backdrop make(Bitmap src, Bitmap cover, boolean forLight) {
+        return make(src, cover, forLight, false);
+    }
+
+    private static Backdrop make(Bitmap src, Bitmap cover, boolean forLight, boolean keepPhoto) {
         Bitmap out = Bitmap.createBitmap(W, H, Bitmap.Config.ARGB_8888);
         Canvas c = new Canvas(out);
         Paint photo = new Paint(Paint.FILTER_BITMAP_FLAG | Paint.DITHER_FLAG);
@@ -72,6 +81,7 @@ final class Backdrop {
             int[] lightGlass = whiten(glass.clone(), 0.74f);
             int[] night = darken(frost.clone(), 0.76f);
             int[] nightGlass = darken(glass, 0.56f);
+            if (keepPhoto) return new Backdrop(gpu(out), frost, null, wide, tall, light, lightGlass, night, nightGlass);
             out.recycle();
             return new Backdrop(null, frost, null, wide, tall, light, lightGlass, night, nightGlass);
         }

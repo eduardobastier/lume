@@ -2269,8 +2269,61 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         }
         for (Recs.Pick p : list) recs.backdrop(p);
         Backdrop b = cards.isEmpty() ? null : recs.backdrop(cards.get(0));
+        boolean off = !Prefs.recsOn(getContext());
+        if (off != recsOff) {
+            recsOff = off;
+            if (off && zone == Z_TOP && topIndex < 3) topIndex = 3;
+            retarget(false);
+            invalidateAll();
+        }
+        if (cards.isEmpty() && !Recs.hasKey(getContext())) b = wallpaper();
         if (cards.isEmpty() || b != null) showBackdrop(b);
         heroDirty = true;
+    }
+
+    // MARK: - Wallpapers (recommendations off)
+
+    private LinearGradient wallScrim;
+    private float wallScrimNight = -1;
+    private boolean recsOff;            // recommendations turned off: no tabs or cards, just the wallpaper
+    private String wallName;            // the wallpaper shown (or being loaded)
+    private Backdrop wallBackdrop;
+    private boolean wallLoading;
+
+    /** The wallpaper for now (Wallpapers.current), loaded in the background the first time; null until it's ready. */
+    private Backdrop wallpaper() {
+        Context c = getContext();
+        Wallpapers.syncIfStale(c, false, () -> handler.post(this::updateCards));
+        java.io.File f = Wallpapers.current(c, false);
+        if (f == null) return null;
+        String name = f.getName() + ":" + f.lastModified();
+        if (name.equals(wallName)) return wallBackdrop;
+        if (wallLoading) return wallBackdrop;
+        wallLoading = true;
+        new Thread(() -> {
+            Backdrop made = null;
+            try {
+                android.graphics.BitmapFactory.Options bounds = new android.graphics.BitmapFactory.Options();
+                bounds.inJustDecodeBounds = true;
+                android.graphics.BitmapFactory.decodeFile(f.getPath(), bounds);
+                android.graphics.BitmapFactory.Options opts = new android.graphics.BitmapFactory.Options();
+                opts.inSampleSize = 1;
+                while (bounds.outWidth / (opts.inSampleSize * 2) >= Backdrop.W) opts.inSampleSize *= 2;
+                android.graphics.Bitmap bm = android.graphics.BitmapFactory.decodeFile(f.getPath(), opts);
+                if (bm != null) made = Backdrop.wallpaper(bm);
+                else AppLog.w("wallpaper unreadable: " + f.getName());
+            } catch (RuntimeException | OutOfMemoryError e) {
+                AppLog.w("wallpaper " + f.getName() + ": " + e.getMessage());
+            }
+            final Backdrop ready = made;
+            handler.post(() -> {
+                wallLoading = false;
+                wallName = name;
+                if (ready != null) wallBackdrop = ready;
+                if (running) updateCards();
+            });
+        }, "wallpaper").start();
+        return wallBackdrop;
     }
 
     private void selectTab(int index) {
@@ -2319,6 +2372,21 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
     }
 
     private void drawLightImage(Canvas c, Backdrop b, float alpha) {
+        if (b == wallBackdrop && recsOff && b.image != null) {
+            // A wallpaper shows sharp, with a soft veil at the top so the title, clock and buttons stay readable.
+            drawImage(c, b.image, alpha);
+            if (wallScrim == null || wallScrimNight != night) {
+                wallScrimNight = night;
+                int veil = blend(0x8CF5F5F7, 0x99000000, night);
+                wallScrim = new LinearGradient(0, 0, 0, 300 * k, veil, veil & 0x00FFFFFF, Shader.TileMode.CLAMP);
+            }
+            fill.setShader(wallScrim);
+            fill.setAlpha(Math.round(255 * Math.min(1, alpha)));
+            c.drawRect(0, 0, w, 300 * k, fill);
+            fill.setAlpha(255);
+            fill.setShader(null);
+            return;
+        }
         if (night < 0.999f || b.nightImage == null) drawImage(c, b.lightImage, alpha);
         if (night > 0.001f) drawImage(c, b.nightImage, alpha * night);
     }
@@ -2339,9 +2407,13 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
 
     private void drawLightTop(Canvas c) {
         applyTone();
-        String hello = Ui.tr("Para você", "For You");
+        String hello = recsOff ? Ui.tr("Início", "Home") : Ui.tr("Para você", "For You");
         c.drawText(hello, MARGIN * k - Ui.leftBearing(lTitle, hello), L_TITLE_BASE * k, lTitle);
         drawWeatherSummary(c);
+        if (recsOff) {
+            drawQuotes(c);
+            return;
+        }
         // Text tabs (the selected one in bold, in the main text color); with focus on the tabs, the selected one gets
         // the white pill with a shadow and grows a little (the tvOS focus).
         float focus = Ui.clamp(topFocus[tab].value);
@@ -2516,7 +2588,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
                 if (dy >= 0 || shelf.isEmpty()) return false;
                 if (cards.isEmpty()) {
                     zone = Z_TOP;
-                    topIndex = tab;
+                    topIndex = recsOff ? 3 : tab;   // no tabs without recommendations: the buttons
                 } else {
                     zone = Z_CARDS;
                     cardIndex = nearest(cardRects, cards.size(), tileRects[shelfIndex].centerX());
@@ -2537,7 +2609,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
                 break;
             case Z_TOP:
                 if (dx != 0) {
-                    int next = Math.max(0, Math.min(5, topIndex + dx));
+                    int next = Math.max(recsOff ? 3 : 0, Math.min(5, topIndex + dx));
                     if (next == topIndex) return true;
                     topIndex = next;
                     if (topIndex < 3) selectTab(topIndex);   // like Apple TV tabs: focusing a tab selects it
