@@ -2294,7 +2294,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
     private Backdrop wallpaper() {
         Context c = getContext();
         Wallpapers.syncIfStale(c, false, () -> handler.post(this::updateCards));
-        java.io.File f = Wallpapers.current(c, false);
+        java.io.File f = Wallpapers.current(c, night >= 0.5f ? Prefs.WP_DARK : Prefs.WP_LIGHT);
         if (f == null) return null;
         String name = f.getName() + ":" + f.lastModified();
         if (name.equals(wallName)) return wallBackdrop;

@@ -67,18 +67,25 @@ final class Wallpapers {
         return out;
     }
 
-    /** "beach.jpg" → "beach". */
+    /** The image's title when the source gives one (Bing), else its name: "beach.jpg" → "beach". */
+    static String label(Context c, String name) {
+        String title = c.getSharedPreferences("wallpaper-shas", Context.MODE_MULTI_PROCESS).getString("t:" + name, "");
+        return title.isEmpty() ? label(name) : title;
+    }
+
     static String label(String name) {
         int dot = name.lastIndexOf('.');
         return (dot > 0 ? name.substring(0, dot) : name).replace('_', ' ').replace('-', ' ');
     }
 
-    /** The image to show now on the home screen or the screensaver, or null without any. */
-    static File current(Context c, boolean saver) {
+    /** The image to show now in a slot (Prefs.WP_LIGHT, WP_DARK or WP_SAVER), or null without any. */
+    static File current(Context c, int slot) {
         List<String> names = names(c);
         if (names.isEmpty()) return null;
-        String choice = Prefs.wallpaper(c, saver);
-        if (choice.equals("same")) choice = Prefs.wallpaper(c, false);
+        String choice = Prefs.wallpaper(c, slot);
+        // The screensaver (always dark) follows the dark theme, which follows the light one.
+        if (choice.equals("same") && slot == Prefs.WP_SAVER) choice = Prefs.wallpaper(c, Prefs.WP_DARK);
+        if (choice.equals("same")) choice = Prefs.wallpaper(c, Prefs.WP_LIGHT);
         if (choice.startsWith("fixed:")) {
             String name = choice.substring(6);
             return new File(dir(c), names.contains(name) ? name : names.get(0));
@@ -87,8 +94,8 @@ final class Wallpapers {
         try {
             minutes = Math.max(1, Integer.parseInt(choice.substring(choice.indexOf(':') + 1)));
         } catch (RuntimeException ignored) {}
-        long slot = System.currentTimeMillis() / (minutes * 60_000L);
-        return new File(dir(c), names.get((int) (slot % names.size())));
+        long period = System.currentTimeMillis() / (minutes * 60_000L);
+        return new File(dir(c), names.get((int) (period % names.size())));
     }
 
     /** In the background: syncs with the repository if it's been a while (or `force`). Calls `done` after, if any. */
@@ -117,6 +124,7 @@ final class Wallpapers {
     /** One image at the source: its file name here, where to download it, and what changes when it's replaced. */
     private static final class Entry {
         final String name, url, version;
+        String title = "";
 
         Entry(String name, String url, String version) {
             this.name = name;
@@ -135,7 +143,9 @@ final class Wallpapers {
                 for (int i = 0; i < images.length(); i++) {
                     JSONObject o = images.getJSONObject(i);
                     String date = o.optString("startdate");
-                    out.add(new Entry("bing-" + date + ".jpg", "https://www.bing.com" + o.optString("url"), date));
+                    Entry e = new Entry("bing-" + date + ".jpg", "https://www.bing.com" + o.optString("url"), date);
+                    e.title = o.optString("title");
+                    out.add(e);
                 }
             } else if (source.startsWith("wallhaven:")) {
                 String q = source.substring(10);
@@ -185,6 +195,7 @@ final class Wallpapers {
         for (Entry e : entries) {
             if (!image(e.name)) continue;
             wanted.add(e.name);
+            if (!e.title.isEmpty()) shas.edit().putString("t:" + e.name, e.title).apply();
             File f = new File(dir, e.name);
             if (f.exists() && e.version.equals(shas.getString(e.name, ""))) continue;
             File part = new File(dir, e.name + ".part");

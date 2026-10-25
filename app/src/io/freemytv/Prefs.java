@@ -81,12 +81,16 @@ final class Prefs {
         return ui(c).getBoolean("recs_on", true);
     }
 
+    /** Wallpaper slots: the home screen in the light theme, in the dark theme, and the screensaver. */
+    static final int WP_LIGHT = 0, WP_DARK = 1, WP_SAVER = 2;
+    private static final String[] WP_KEYS = {"wp_home", "wp_home_dark", "wp_saver"};
+
     /**
-     * Wallpaper choice: "every:<minutes>" (rotates through the images) or "fixed:<image name>"; for the screensaver also
-     * "same" (whatever the home screen shows).
+     * Wallpaper choice: "every:<minutes>" (rotates through the images) or "fixed:<image name>"; for the dark theme and
+     * the screensaver also "same" (the dark theme: whatever the light one shows; the screensaver: the dark theme's).
      */
-    static String wallpaper(Context c, boolean saver) {
-        return ui(c).getString(saver ? "wp_saver" : "wp_home", saver ? "same" : "every:60");
+    static String wallpaper(Context c, int slot) {
+        return ui(c).getString(WP_KEYS[slot], slot == WP_LIGHT ? "every:60" : "same");
     }
 
     /**
@@ -101,8 +105,8 @@ final class Prefs {
         ui(c).edit().putString("wp_source", value).apply();
     }
 
-    static void setWallpaper(Context c, boolean saver, String value) {
-        ui(c).edit().putString(saver ? "wp_saver" : "wp_home", value).apply();
+    static void setWallpaper(Context c, int slot, String value) {
+        ui(c).edit().putString(WP_KEYS[slot], value).apply();
     }
 
     static boolean showWeather(Context c) {

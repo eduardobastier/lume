@@ -302,7 +302,7 @@ final class DreamView extends View implements Choreographer.FrameCallback, HomeD
      */
     private void prepareWallpaper(Slide last) {
         Wallpapers.syncIfStale(getContext(), false, null);
-        File file = Wallpapers.current(getContext(), true);
+        File file = Wallpapers.current(getContext(), Prefs.WP_SAVER);
         if (file == null) {
             if (current == null) fallback = true;
             return;
