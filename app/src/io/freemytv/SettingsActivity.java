@@ -106,6 +106,16 @@ public class SettingsActivity extends Activity {
                 Prefs.typedTmdbKey(this) ? Prefs.tmdbKey(this) : "", true, this::saveTmdbKey);
     }
 
+    /** Wallpaper → Source → Wallhaven search: what to look for (in English works best), typed with the TV's keyboard. */
+    void askWallhaven() {
+        String v = Prefs.wallpaperSource(this);
+        askText(Ui.tr("Buscar no Wallhaven", "Search Wallhaven"),
+                Ui.tr("Uma ou duas palavras, de preferência em inglês: nature, city night, mountains.",
+                        "One or two words: nature, city night, mountains."),
+                Ui.tr("O que buscar", "Search for"), v.startsWith("wallhaven:") ? v.substring(10) : "", false,
+                text -> view.setWallpaperSource("wallhaven:" + text));
+    }
+
     /** Weather → City: typed with the TV's keyboard and looked up (Open-Meteo) before it's kept. */
     void askCity() {
         askText(Ui.tr("Cidade da previsão", "Weather city"),
@@ -223,7 +233,7 @@ public class SettingsActivity extends Activity {
         private static final int[] SAVER_MINUTES = {1, 2, 5, 10, 15, 30, 60};
         /** The popup over the list: none, the theme, the genres (several at once) or what OK on a card opens. */
         private static final int NO_POPUP = 0, THEME_POPUP = 1, GENRE_POPUP = 2, ACTION_POPUP = 3, LIVE_POPUP = 4, SAVER_POPUP = 5,
-                YES_NO_POPUP = 6, PLACE_POPUP = 7, WP_MODE_POPUP = 8, WP_PICK_POPUP = 9;
+                YES_NO_POPUP = 6, PLACE_POPUP = 7, WP_MODE_POPUP = 8, WP_PICK_POPUP = 9, WP_SOURCE_POPUP = 10;
         /** The on/off choice the Yes/No popup is for: its Prefs key and title. */
         private String yesNoKey = "", yesNoTitle = "";
         /** Live TV choices: [value, name], built when the popup opens (the TV's inputs and installed apps). */
@@ -402,7 +412,7 @@ public class SettingsActivity extends Activity {
         }
 
         private int rowCount() {
-            return screen == MAIN ? MAIN_ROWS : screen == RECS ? 7 : screen == THEME ? 3 : screen == WEATHER ? 3 : screen == WALL ? 3 : screen == UPDATE ? updateRows() : 2;
+            return screen == MAIN ? MAIN_ROWS : screen == RECS ? 7 : screen == THEME ? 3 : screen == WEATHER ? 3 : screen == WALL ? 4 : screen == UPDATE ? updateRows() : 2;
         }
 
         @Override protected void onDraw(Canvas c) {
@@ -596,11 +606,12 @@ public class SettingsActivity extends Activity {
         private void drawWallScreen(Canvas c) {
             Context ctx = getContext();
             int n = Wallpapers.names(ctx).size();
-            String[] labels = {Ui.tr("Imagens", "Images"), Ui.tr("Tela inicial", "Home screen"), Ui.tr("Tela de descanso", "Screensaver")};
+            String[] labels = {Ui.tr("Fonte", "Source"), Ui.tr("Imagens", "Images"), Ui.tr("Tela inicial", "Home screen"),
+                    Ui.tr("Tela de descanso", "Screensaver")};
             String count = wpSyncing ? Ui.tr("Sincronizando…", "Syncing…") : !wpStatus.isEmpty() ? wpStatus
                     : n == 0 ? Ui.tr("Nenhuma ainda", "None yet") : n + Ui.tr(n == 1 ? " imagem" : " imagens", n == 1 ? " image" : " images");
-            String[] values = {count, wallName(false), wallName(true)};
-            for (int i = 0; i < 3; i++) {
+            String[] values = {Wallpapers.sourceName(ctx), count, wallName(false), wallName(true)};
+            for (int i = 0; i < 4; i++) {
                 float y = (LIST_TOP + 20 + i * (ROW_H + ROW_GAP)) * k;
                 rowRect.set(LIST_X * k, y, LIST_R * k, y + ROW_H * k);
                 float f = drawRowBackground(c, i);
@@ -610,15 +621,12 @@ public class SettingsActivity extends Activity {
                 valueAndChevron(c, values[i], base, f);
             }
             Paint hint = Ui.text(Ui.regular, 23 * k, fg(0x8CFFFFFF));
-            String note = Wallpapers.enabled()
-                    ? Ui.tr("De github.com/" + Config.WALLPAPER_REPO + " (pasta " + Config.WALLPAPER_PATH + ").",
-                            "From github.com/" + Config.WALLPAPER_REPO + " (folder " + Config.WALLPAPER_PATH + ").")
-                    : Ui.tr("Sem repositório de papéis de parede neste APK.", "No wallpaper repository in this APK.");
-            c.drawText(TextUtils.ellipsize(note, new TextPaint(hint), (LIST_R - LIST_X - 30) * k, TextUtils.TruncateAt.END).toString(),
-                    LIST_X * k + 30 * k, (LIST_TOP + 20 + 3 * (ROW_H + ROW_GAP) + 40) * k, hint);
-            String more = (Prefs.recsOn(ctx) ? Ui.tr("Aparece com as recomendações desligadas. ", "Shows when the recommendations are off. ") : "")
-                    + Ui.tr("OK em Imagens sincroniza agora.", "OK on Images syncs now.");
-            c.drawText(more, LIST_X * k + 30 * k, (LIST_TOP + 20 + 3 * (ROW_H + ROW_GAP) + 80) * k, hint);
+            String note = Ui.tr("Baixadas na TV (até 12), nada vem dentro do app. Atualiza a cada 3 h.",
+                    "Downloaded on the TV (up to 12); none come with the app. Refreshed every 3 h.");
+            c.drawText(note, LIST_X * k + 30 * k, (LIST_TOP + 20 + 4 * (ROW_H + ROW_GAP) + 40) * k, hint);
+            String more = Prefs.recsOn(ctx) ? Ui.tr("Aparece com as recomendações desligadas.", "Shows when the recommendations are off.")
+                    : Ui.tr("OK em Imagens sincroniza agora.", "OK on Images syncs now.");
+            c.drawText(more, LIST_X * k + 30 * k, (LIST_TOP + 20 + 4 * (ROW_H + ROW_GAP) + 80) * k, hint);
         }
 
         private void syncWallpapers() {
@@ -652,6 +660,31 @@ public class SettingsActivity extends Activity {
                 i--;
             }
             return i == 0 ? "fixed:" : "every:" + WP_MINUTES[i - 1];
+        }
+
+        /** The wallpaper sources: Bing, Wallhaven (popular or a search) and, if this APK names one, the GitHub folder. */
+        private String[] wpSources() {
+            List<String> out = new ArrayList<>();
+            out.add(Ui.tr("Bing: imagens do dia", "Bing: images of the day"));
+            out.add(Ui.tr("Wallhaven: mais populares", "Wallhaven: most popular"));
+            out.add(Ui.tr("Wallhaven: buscar…", "Wallhaven: search…"));
+            if (!Config.WALLPAPER_REPO.isEmpty()) out.add("GitHub: " + Config.WALLPAPER_REPO);
+            return out.toArray(new String[0]);
+        }
+
+        private int wpSourceIndex() {
+            String v = Prefs.wallpaperSource(getContext());
+            return v.equals("bing") ? 0 : v.equals("wallhaven:") ? 1 : v.startsWith("wallhaven:") ? 2 : 3;
+        }
+
+        void setWallpaperSource(String value) {
+            Context c = getContext();
+            Prefs.setWallpaperSource(c, value);
+            // A fixed image from the old source is gone: back to rotating (home) and following the home screen (saver).
+            if (Prefs.wallpaper(c, false).startsWith("fixed:")) Prefs.setWallpaper(c, false, "every:60");
+            if (Prefs.wallpaper(c, true).startsWith("fixed:")) Prefs.setWallpaper(c, true, "same");
+            wpStatus = "";
+            syncWallpapers();
         }
 
         private List<String> wpNames() {
@@ -998,6 +1031,7 @@ public class SettingsActivity extends Activity {
             if (popup == PLACE_POPUP) return Ui.tr("Localização", "Location");
             if (popup == WP_MODE_POPUP) return wpSaver ? Ui.tr("Tela de descanso", "Screensaver") : Ui.tr("Tela inicial", "Home screen");
             if (popup == WP_PICK_POPUP) return Ui.tr("Imagem fixa", "Fixed image");
+            if (popup == WP_SOURCE_POPUP) return Ui.tr("Fonte das imagens", "Image source");
             return popup == THEME_POPUP ? Ui.tr("Tema", "Theme") : popup == GENRE_POPUP ? Ui.tr("Categorias", "Genres")
                     : Ui.tr("Ao apertar OK no card", "OK on a card");
         }
@@ -1009,6 +1043,7 @@ public class SettingsActivity extends Activity {
             if (popup == PLACE_POPUP) return new String[] {Ui.tr("Automática (pela internet)", "Automatic (internet)"),
                     Ui.tr("Cidade escolhida", "Chosen city")};
             if (popup == WP_MODE_POPUP) return wpModeOptions();
+            if (popup == WP_SOURCE_POPUP) return wpSources();
             if (popup == WP_PICK_POPUP) {
                 List<String> names = wpNames();
                 String[] out = new String[names.size()];
@@ -1042,6 +1077,7 @@ public class SettingsActivity extends Activity {
                 return mine.equals("fixed:") ? v.startsWith("fixed:") : v.equals(mine);
             }
             if (popup == WP_PICK_POPUP) return Prefs.wallpaper(getContext(), wpSaver).equals("fixed:" + wpNames().get(i));
+            if (popup == WP_SOURCE_POPUP) return wpSourceIndex() == i;
             return Prefs.genres(getContext()).contains(Prefs.GENRES[i][0]);
         }
 
@@ -1124,7 +1160,7 @@ public class SettingsActivity extends Activity {
             popup = kind;
             popupFocus = kind == THEME_POPUP ? HomeView.theme(getContext()) : kind == ACTION_POPUP ? actionIndex() : 0;
             if (kind == LIVE_POPUP || kind == SAVER_POPUP || kind == YES_NO_POPUP || kind == PLACE_POPUP || kind == WP_MODE_POPUP
-                    || kind == WP_PICK_POPUP) {
+                    || kind == WP_PICK_POPUP || kind == WP_SOURCE_POPUP) {
                 for (int i = 0; i < popupOptions().length; i++) if (popupChecked(i)) popupFocus = i;
             }
             for (Spring s : popupPop) s.snap(0);
@@ -1297,6 +1333,12 @@ public class SettingsActivity extends Activity {
                                 Prefs.setWallpaper(c, wpSaver, v);
                                 popup = NO_POPUP;
                             }
+                        } else if (popup == WP_SOURCE_POPUP) {
+                            popup = NO_POPUP;
+                            if (popupFocus == 0) setWallpaperSource("bing");
+                            else if (popupFocus == 1) setWallpaperSource("wallhaven:");
+                            else if (popupFocus == 2) activity.askWallhaven();
+                            else setWallpaperSource("github");
                         } else if (popup == WP_PICK_POPUP) {
                             Prefs.setWallpaper(c, wpSaver, "fixed:" + wpNames().get(popupFocus));
                             popup = NO_POPUP;
@@ -1363,9 +1405,10 @@ public class SettingsActivity extends Activity {
                 invalidate();
                 return;
             } else if (screen == WALL) {
-                if (focus == 0) syncWallpapers();
+                if (focus == 0) openPopup(WP_SOURCE_POPUP);
+                else if (focus == 1) syncWallpapers();
                 else {
-                    wpSaver = focus == 2;
+                    wpSaver = focus == 3;
                     openPopup(WP_MODE_POPUP);
                 }
                 invalidate();

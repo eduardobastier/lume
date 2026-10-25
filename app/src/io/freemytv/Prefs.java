@@ -89,6 +89,18 @@ final class Prefs {
         return ui(c).getString(saver ? "wp_saver" : "wp_home", saver ? "same" : "every:60");
     }
 
+    /**
+     * Where the wallpapers come from: "bing" (Bing's images of the day), "wallhaven:<search>" (Wallhaven's most popular,
+     * optionally a search) or "github" (the repository in config.properties).
+     */
+    static String wallpaperSource(Context c) {
+        return ui(c).getString("wp_source", "bing");
+    }
+
+    static void setWallpaperSource(Context c, String value) {
+        ui(c).edit().putString("wp_source", value).apply();
+    }
+
     static void setWallpaper(Context c, boolean saver, String value) {
         ui(c).edit().putString(saver ? "wp_saver" : "wp_home", value).apply();
     }
