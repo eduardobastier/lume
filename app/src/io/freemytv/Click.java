@@ -13,7 +13,8 @@ import java.nio.ByteOrder;
 /**
  * Soft click for the home screen (moving focus and opening). The app synthesizes the sound itself (a short, low
  * "tock"), writes it once as a WAV in the cache and plays it quietly through SoundPool. It only plays on the home
- * screen, never inside apps.
+ * screen, never inside apps. It goes out like game audio (the TV's volume, through HDMI): TV boxes route "system
+ * sounds" to a built-in speaker they don't have, or keep that volume at zero, and the click was silent there.
  */
 final class Click {
     private static final int RATE = 48_000;
@@ -26,7 +27,7 @@ final class Click {
         context = c.getApplicationContext();
         try {
             pool = new SoundPool.Builder().setMaxStreams(3).setAudioAttributes(new AudioAttributes.Builder()
-                    .setUsage(AudioAttributes.USAGE_ASSISTANCE_SONIFICATION)
+                    .setUsage(AudioAttributes.USAGE_GAME)
                     .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION).build()).build();
             move = pool.load(wav(c, "click-move.wav", 1450f, 0.009f, 0.030f), 1);
             open = pool.load(wav(c, "click-open.wav", 880f, 0.022f, 0.090f), 1);

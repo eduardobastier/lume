@@ -129,7 +129,7 @@ final class HomeMode {
             busy(c, Ui.tr("Trocando o Início e a tela de descanso…", "Switching the home screen and screensaver…"));
             check(adb.shell("cmd package set-home-activity " + HOME_ACTIVITY), "Success",
                     Ui.tr("o Android não aceitou o novo Início", "Android didn't accept the new home screen"));
-            adb.shell("settings put secure screensaver_components " + DREAM);
+            ensureDream(c, adb);
             List<String> targets = targets(home, dream);
             Set<String> disabled = new HashSet<>(stringList(state(c), "disabled"));
             Set<String> present = packages(adb, "");
@@ -185,6 +185,8 @@ final class HomeMode {
             boolean homeOk = restoreHome(adb, home);
             adb.shell("settings delete secure screensaver_components");
             s = state(c);
+            restoreSetting(adb, "secure screensaver_enabled", s, "originalDreamEnabled");
+            restoreSetting(adb, "system screen_off_timeout", s, "originalScreenTimeout");
             s.put("mode", ORIGINAL).put("since", System.currentTimeMillis()).put("homeReverted", false)
                     .put("disabled", new JSONArray(failed));
             save(c, s);
@@ -285,10 +287,7 @@ final class HomeMode {
                     // Android 12 can't say who holds HOME: set it again quietly instead of reporting a fix.
                     if (!holders.contains("Unknown command")) fixed.add(Ui.tr("o Início", "the home screen"));
                 }
-                if (!adb.shell("settings get secure screensaver_components").contains(DREAM)) {
-                    adb.shell("settings put secure screensaver_components " + DREAM);
-                    fixed.add(Ui.tr("a tela de descanso", "the screensaver"));
-                }
+                if (ensureDream(app, adb)) fixed.add(Ui.tr("a tela de descanso", "the screensaver"));
                 JSONObject latest = state(app);
                 latest.put("disabled", new JSONArray(sorted(disabled)));
                 save(app, latest);
@@ -303,6 +302,50 @@ final class HomeMode {
                 notice(app, Ui.tr("A TV foi atualizada; o Free My TV continua igual.", "The TV was updated; Free My TV is still on."));
             }
         }
+    }
+
+    /**
+     * Makes the system really start our screensaver: ours registered, the system screensaver on, and the screen timing
+     * out at some point. Many TV boxes (BTV and the like) ship with the screensaver off and the screen never timing out,
+     * because their own home screen ran a screensaver of its own; registering ours alone, it never appeared. A
+     * "never" timeout becomes 10 min (Android then shows the screensaver instead of sleeping). The values found are
+     * recorded once, so "original" puts them back. True if something had to change.
+     */
+    private static boolean ensureDream(Context c, Adb adb) throws IOException, JSONException {
+        boolean changed = false;
+        if (!adb.shell("settings get secure screensaver_components").contains(DREAM)) {
+            adb.shell("settings put secure screensaver_components " + DREAM);
+            changed = true;
+        }
+        String enabled = adb.shell("settings get secure screensaver_enabled").trim();
+        String timeout = adb.shell("settings get system screen_off_timeout").trim();
+        long ms;
+        try {
+            ms = Long.parseLong(timeout);
+        } catch (NumberFormatException e) {
+            ms = -1;
+        }
+        boolean neverIdle = ms <= 0 || ms > 4 * 3600_000L;
+        if (enabled.equals("1") && !neverIdle) return changed;
+        JSONObject s = state(c);
+        if (!enabled.equals("1")) {
+            if (!s.has("originalDreamEnabled")) s.put("originalDreamEnabled", enabled);
+            adb.shell("settings put secure screensaver_enabled 1");
+        }
+        if (neverIdle) {
+            if (!s.has("originalScreenTimeout")) s.put("originalScreenTimeout", timeout);
+            adb.shell("settings put system screen_off_timeout 600000");
+        }
+        save(c, s);
+        return true;
+    }
+
+    /** Puts back a setting ensureDream changed ("namespace key"; "null" = it wasn't set) and forgets the record. */
+    private static void restoreSetting(Adb adb, String setting, JSONObject s, String recorded) throws IOException {
+        if (!s.has(recorded)) return;
+        String value = s.optString(recorded);
+        adb.shell(value.isEmpty() || value.equals("null") ? "settings delete " + setting : "settings put " + setting + " " + value);
+        s.remove(recorded);
     }
 
     /** What to turn off: the TV's own home screen and screensaver, Google TV's recovery home, and the lists above. */
