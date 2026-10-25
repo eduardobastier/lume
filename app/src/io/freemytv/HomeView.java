@@ -42,7 +42,7 @@ import java.util.concurrent.Executors;
 /**
  * The home screen, styled after the Apple TV app with the macOS 27 glass:
  *  - at the top left, the "For You" title and the tabs (Explore, Movies, Shows); at the top right, icon-only glass
- *    buttons (Live TV, HDMI Inputs, Settings), with the focused one's name below it, and the small crypto quotes
+ *    buttons (Live TV, network, Settings) after a clock pill, with the focused one's name below it, and the small crypto quotes
  *    (logo + price) at the right end of the tab row;
  *  - three cards with the titles recommended for right now in the selected tab (Recs, from TMDB); the background is
  *    the first card's photo, heavily blurred and almost white (Backdrop); without one, a light gradient;
@@ -276,6 +276,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
             checkNotices();
             updatePalette();
             checkNight(true);
+            if (updateNet()) status.invalidate();
             updatePicks();      // three new ones every hour
             handler.postDelayed(this, 15_000);
         }
@@ -339,6 +340,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         handler.postDelayed(tick, 15_000);
         handler.postDelayed(rotate, ROTATE_MS);
         checkNotices();
+        updateNet();
         reload();
         updatePalette();
         updatePicks();
@@ -391,8 +393,98 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
     private void makeLightButtons() {
         lightButtons.clear();
         lightButtons.add(HomeApps.action(HomeApps.LIVE_TV, "live", Ui.tr("TV ao Vivo", "Live TV"), "live_tv"));
-        lightButtons.add(HomeApps.action(HomeApps.INPUTS, "inputs", Ui.tr("Entradas HDMI", "HDMI Inputs"), "hdmi"));
+        lightButtons.add(HomeApps.action(HomeApps.NETWORK, "network", netLabel(), "network"));
         lightButtons.add(HomeApps.action(HomeApps.SETTINGS, "settings", Ui.tr("Configurações", "Settings"), "settings"));
+    }
+
+    // MARK: - Network button and clock pill (top right)
+
+    private static final int NET_NONE = 0, NET_WIFI = 1, NET_CABLE = 2;
+    private int net = -1;
+    private Paint lPill, netStroke;
+    private final RectF pillRect = new RectF(), arcRect = new RectF();
+    private final android.graphics.Path netPath = new android.graphics.Path();
+
+    /** Wi‑Fi, cable or no internet, from the active network (checked on resume and every 15 s). */
+    private boolean updateNet() {
+        int now = NET_NONE;
+        try {
+            android.net.ConnectivityManager cm = (android.net.ConnectivityManager) getContext().getSystemService(Context.CONNECTIVITY_SERVICE);
+            android.net.NetworkCapabilities nc = cm == null ? null : cm.getNetworkCapabilities(cm.getActiveNetwork());
+            if (nc != null && nc.hasCapability(android.net.NetworkCapabilities.NET_CAPABILITY_INTERNET)) {
+                if (nc.hasTransport(android.net.NetworkCapabilities.TRANSPORT_ETHERNET)) now = NET_CABLE;
+                else now = NET_WIFI;
+            }
+        } catch (RuntimeException e) {
+            AppLog.w("network state: " + e.getMessage());
+        }
+        if (now == net) return false;
+        net = now;
+        if (lightButtons.size() > 1) lightButtons.get(1).label = netLabel();
+        return true;
+    }
+
+    private String netLabel() {
+        return net == NET_CABLE ? Ui.tr("Internet a cabo", "Wired internet")
+                : net == NET_WIFI ? "Wi‑Fi" : Ui.tr("Sem internet", "No internet");
+    }
+
+    /** The network symbol, drawn as strokes (Wi‑Fi waves, an Ethernet port, or Wi‑Fi crossed out), ~size tall. */
+    private void drawNet(Canvas c, float cx, float cy, float size, int color) {
+        if (netStroke == null) {
+            netStroke = new Paint(Paint.ANTI_ALIAS_FLAG);
+            netStroke.setStyle(Paint.Style.STROKE);
+            netStroke.setStrokeCap(Paint.Cap.ROUND);
+            netStroke.setStrokeJoin(Paint.Join.ROUND);
+        }
+        float u = size / 24f;
+        netStroke.setColor(color);
+        netStroke.setStrokeWidth(2.4f * u);
+        if (net == NET_CABLE) {
+            // Filled like the other symbols: an Ethernet port with the latch tab below and three contacts cut out.
+            float l = cx - 10 * u, r = cx + 10 * u, t = cy - 9 * u, b = cy + 5 * u;
+            netPath.rewind();
+            netPath.setFillType(android.graphics.Path.FillType.EVEN_ODD);
+            float rr = 2.2f * u;
+            arcRect.set(l, t, r, b);
+            netPath.addRoundRect(arcRect, rr, rr, android.graphics.Path.Direction.CW);
+            arcRect.set(cx - 5 * u, b - 1 * u, cx + 5 * u, b + 4.5f * u);
+            netPath.addRoundRect(arcRect, 1.2f * u, 1.2f * u, android.graphics.Path.Direction.CW);
+            for (int i = -1; i <= 1; i++) {
+                arcRect.set(cx + i * 4.6f * u - 1.2f * u, t + 3 * u, cx + i * 4.6f * u + 1.2f * u, t + 8 * u);
+                netPath.addRect(arcRect, android.graphics.Path.Direction.CW);
+            }
+            netStroke.setStyle(Paint.Style.FILL);
+            c.drawPath(netPath, netStroke);
+            netStroke.setStyle(Paint.Style.STROKE);
+            return;
+        }
+        netStroke.setStrokeWidth(3 * u);
+        float oy = cy + 8 * u;
+        for (float rad : new float[] {6.5f * u, 12 * u, 17.5f * u}) {
+            arcRect.set(cx - rad, oy - rad, cx + rad, oy + rad);
+            c.drawArc(arcRect, 225, 90, false, netStroke);
+        }
+        netStroke.setStyle(Paint.Style.FILL);
+        c.drawCircle(cx, oy - 0.5f * u, 2.1f * u, netStroke);
+        netStroke.setStyle(Paint.Style.STROKE);
+        if (net != NET_WIFI) c.drawLine(cx - 12 * u, cy - 10 * u, cx + 12 * u, cy + 10 * u, netStroke);
+    }
+
+    /** The time in a glass pill like the buttons, left of them (not focusable). */
+    private void drawClockPill(Canvas c) {
+        if (clockText.isEmpty() || lPill == null) return;
+        RectF first = topRects[3];
+        float h = first.height(), w = lPill.measureText(clockText) + 2 * 30 * k;
+        float right = first.left - L_BUTTON_GAP * k;
+        RectF r = pillRect;
+        r.set(right - w, first.top, right, first.bottom);
+        tmp.set(r);
+        tmp.offset(0, 6 * k);
+        drawShadow(c, tmp, h / 2, 26 * k, Ui.alpha(0xFF000000, tone(0.1f, 0.3f)));
+        scene.liquid(c, r, h / 2, tone(0xFFFFFFFF, SMOKE), tone(0.55f, 0.5f), tone(0.02f, 0.01f), 12 * k, 8 * k, tone(0.6f, 0.45f), 1);
+        lPill.setColor(tone(L_INK, 0xEBFFFFFF));
+        c.drawText(clockText, r.centerX(), r.centerY() + Ui.halfCap(lPill), lPill);
     }
 
     private static String[] tabs() {
@@ -498,6 +590,8 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         lTip = Ui.text(Ui.semibold, 25 * k, L_INK);
         lWx = Ui.text(Ui.semibold, 28 * k, L_INK);
         lTip.setTextAlign(Paint.Align.CENTER);
+        lPill = Ui.numbers(Ui.semibold, 34 * k, L_INK);
+        lPill.setTextAlign(Paint.Align.CENTER);
         lightGradient = null;
         buttonPaint = Ui.text(Ui.semibold, 29 * k, INK);
         capsuleText = Ui.numbers(Ui.medium, 29 * k, 0xF2FFFFFF);
@@ -2382,11 +2476,12 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
     }
 
     /**
-     * Live TV, HDMI Inputs and Settings: icon-only glass circles (light by day, smoked at night); the focused one turns
+     * Live TV, network (Wi‑Fi or cable) and Settings: icon-only glass circles (light by day, smoked at night); the focused one turns
      * white with a dark icon (the tvOS focus) and its name appears below it.
      */
     private void drawLightButtons(Canvas c) {
         applyTone();
+        drawClockPill(c);
         for (int i = 0; i < 3; i++) {
             RectF r = topRects[3 + i];
             float f = Ui.clamp(topFocus[3 + i].value), s = 1 + 0.1f * f, rad = r.width() / 2 * s;
@@ -2402,8 +2497,9 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
                 fill.setColor(Ui.alpha(0xFFFFFFFF, f));
                 c.drawCircle(cell.centerX(), cell.centerY(), rad, fill);
             }
-            Symbols.draw(getContext(), c, lightButtons.get(i).symbol, cell.centerX(), cell.centerY(), 27 * k * s,
-                    blend(tone(L_INK, 0xEBFFFFFF), L_INK, f));
+            int iconColor = blend(tone(L_INK, 0xEBFFFFFF), L_INK, f);
+            if (lightButtons.get(i).kind == HomeApps.NETWORK) drawNet(c, cell.centerX(), cell.centerY(), 30 * k * s, iconColor);
+            else Symbols.draw(getContext(), c, lightButtons.get(i).symbol, cell.centerX(), cell.centerY(), 27 * k * s, iconColor);
             if (f > 0.01f) {
                 String label = lightButtons.get(i).label;
                 float half = lTip.measureText(label) / 2;
