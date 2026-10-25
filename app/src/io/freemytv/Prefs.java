@@ -28,9 +28,9 @@ final class Prefs {
     /** What OK on a recommendation card opens. */
     static final String YOUTUBE = "youtube", SMARTTUBE = "smarttube", NUVIO = "nuvio";
     static final String YOUTUBE_PKG = "com.google.android.youtube.tv", NUVIO_PKG = "com.nuvio.tv";
-    /** SmartTube (an unofficial YouTube app): the stable build, then the beta. */
-    static final String[] SMARTTUBE_PKGS = {"com.teamsmart.videomanager.tv", "com.liskovsoft.smarttubetv.beta",
-            "com.liskovsoft.smarttubetv"};
+    /** SmartTube (an unofficial YouTube app): the stable builds (newest package name first), then the betas. */
+    static final String[] SMARTTUBE_PKGS = {"org.smarttube.stable", "com.teamsmart.videomanager.tv", "org.smarttube.beta",
+            "com.liskovsoft.smarttubetv.beta", "com.liskovsoft.smarttubetv"};
 
     private static SharedPreferences ui(Context c) {
         // The screensaver runs in the main process (on Android 12 its window must live with the service), the settings
