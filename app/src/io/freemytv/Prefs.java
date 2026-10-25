@@ -52,10 +52,19 @@ final class Prefs {
         ui(c).edit().putString("recs_genres", String.join(",", list)).apply();
     }
 
-    /** The TMDB key typed on the TV (Home Settings → Recommendations); without one, the key built into the app. */
+    /**
+     * The TMDB key typed on the TV (Home Settings → Recommendations); without one, the key built into the app; without
+     * that, the last key a build of this app brought. A personal build's key is kept, so an over-the-air update to the
+     * public APK (which has none) doesn't take the picks away.
+     */
     static String tmdbKey(Context c) {
         String typed = ui(c).getString("tmdb_key", "").trim();
-        return typed.isEmpty() ? Config.TMDB_KEY.trim() : typed;
+        if (!typed.isEmpty()) return typed;
+        String built = Config.TMDB_KEY.trim();
+        String kept = ui(c).getString("built_tmdb_key", "");
+        if (built.isEmpty()) return kept;
+        if (!built.equals(kept)) ui(c).edit().putString("built_tmdb_key", built).apply();
+        return built;
     }
 
     static boolean typedTmdbKey(Context c) {
