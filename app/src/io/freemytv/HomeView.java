@@ -2407,8 +2407,10 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
 
     private void drawLightTop(Canvas c) {
         applyTone();
-        String hello = recsOff ? Ui.tr("Início", "Home") : Ui.tr("Para você", "For You");
-        c.drawText(hello, MARGIN * k - Ui.leftBearing(lTitle, hello), L_TITLE_BASE * k, lTitle);
+        if (!recsOff) {     // without recommendations, no title: just the wallpaper, the weather and the buttons
+            String hello = Ui.tr("Para você", "For You");
+            c.drawText(hello, MARGIN * k - Ui.leftBearing(lTitle, hello), L_TITLE_BASE * k, lTitle);
+        }
         drawWeatherSummary(c);
         if (recsOff) {
             drawQuotes(c);

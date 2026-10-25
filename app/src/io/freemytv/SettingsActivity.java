@@ -683,8 +683,109 @@ public class SettingsActivity extends Activity {
             // A fixed image from the old source is gone: back to rotating (home) and following the home screen (saver).
             if (Prefs.wallpaper(c, false).startsWith("fixed:")) Prefs.setWallpaper(c, false, "every:60");
             if (Prefs.wallpaper(c, true).startsWith("fixed:")) Prefs.setWallpaper(c, true, "same");
+            synchronized (wpThumbs) {
+                wpThumbs.clear();
+            }
             wpStatus = "";
             syncWallpapers();
+        }
+
+        // The fixed-image picker: thumbnails of the downloaded wallpapers, 4 per row, the focused one raised in white.
+        private static final int WP_COLS = 4;
+        private final java.util.Map<String, android.graphics.Bitmap> wpThumbs = new java.util.HashMap<>();
+        private boolean wpThumbsLoading;
+
+        private void loadWpThumbs() {
+            if (wpThumbsLoading) return;
+            wpThumbsLoading = true;
+            final List<String> names = new ArrayList<>(wpNames());
+            final java.io.File dir = Wallpapers.dir(getContext());
+            new Thread(() -> {
+                for (String name : names) {
+                    synchronized (wpThumbs) {
+                        if (wpThumbs.containsKey(name)) continue;
+                    }
+                    String path = new java.io.File(dir, name).getPath();
+                    android.graphics.BitmapFactory.Options o = new android.graphics.BitmapFactory.Options();
+                    o.inJustDecodeBounds = true;
+                    android.graphics.BitmapFactory.decodeFile(path, o);
+                    o.inJustDecodeBounds = false;
+                    o.inSampleSize = 1;
+                    while (o.outWidth / (o.inSampleSize * 2) >= 360) o.inSampleSize *= 2;
+                    android.graphics.Bitmap b = null;
+                    try {
+                        b = android.graphics.BitmapFactory.decodeFile(path, o);
+                    } catch (OutOfMemoryError ignored) {}
+                    synchronized (wpThumbs) {
+                        wpThumbs.put(name, b);
+                    }
+                    handler.post(this::invalidate);
+                }
+                wpThumbsLoading = false;
+            }, "wallpaper-thumbs").start();
+        }
+
+        private void drawWpPicker(Canvas c, float dt) {
+            List<String> names = wpNames();
+            int rows = Math.max(1, (names.size() + WP_COLS - 1) / WP_COLS);
+            float tw = 330, th = tw * 9 / 16, gap = 26, pad = 44, head = 100, foot = 70;
+            float pw = WP_COLS * tw + (WP_COLS - 1) * gap + 2 * pad, ph = head + rows * (th + gap) + foot;
+            float left = (1920 - pw) / 2 * k, top = Math.max(20, (1080 - ph) / 2) * k;
+            Paint dim = new Paint();
+            dim.setColor(0x99000000);
+            c.drawRect(0, 0, w, h, dim);
+            tmp.set(left, top, left + pw * k, top + ph * k);
+            Paint panel = new Paint(Paint.ANTI_ALIAS_FLAG);
+            panel.setColor(light ? 0xFAE6E6EB : 0xF22C2C2E);
+            c.drawRoundRect(tmp, 32 * k, 32 * k, panel);
+            Paint heading = Ui.text(Ui.displaySemibold, 34 * k, fg(0xFFFFFFFF));
+            c.drawText(popupTitle(), left + pad * k, top + 64 * k, heading);
+            Paint photo = new Paint(Paint.ANTI_ALIAS_FLAG | Paint.FILTER_BITMAP_FLAG);
+            Paint frame = new Paint(Paint.ANTI_ALIAS_FLAG);
+            frame.setStyle(Paint.Style.STROKE);
+            for (int i = 0; i < names.size(); i++) {
+                popupPop[i].target = i == popupFocus ? 1 : 0;
+                popupPop[i].step(dt);
+                float f = Ui.clamp(popupPop[i].value), s = 1 + 0.08f * f;
+                int col = i % WP_COLS, row = i / WP_COLS;
+                float cx = left + (pad + col * (tw + gap) + tw / 2) * k, cy = top + (head + row * (th + gap) + th / 2) * k;
+                RectF r = new RectF(cx - tw * s / 2 * k, cy - th * s / 2 * k, cx + tw * s / 2 * k, cy + th * s / 2 * k);
+                float rad = 14 * k;
+                android.graphics.Bitmap b;
+                synchronized (wpThumbs) {
+                    b = wpThumbs.get(names.get(i));
+                }
+                c.save();
+                android.graphics.Path clip = new android.graphics.Path();
+                clip.addRoundRect(r, rad, rad, android.graphics.Path.Direction.CW);
+                c.clipPath(clip);
+                if (b != null) {
+                    // Center-crop to 16:9.
+                    float scale = Math.max(r.width() / b.getWidth(), r.height() / b.getHeight());
+                    float bw = b.getWidth() * scale, bh = b.getHeight() * scale;
+                    c.drawBitmap(b, null, new RectF(r.centerX() - bw / 2, r.centerY() - bh / 2, r.centerX() + bw / 2, r.centerY() + bh / 2), photo);
+                } else {
+                    Paint ph2 = new Paint();
+                    ph2.setColor(0x33FFFFFF);
+                    c.drawRect(r, ph2);
+                }
+                c.restore();
+                if (f > 0.01f) {
+                    frame.setStrokeWidth(5 * k);
+                    frame.setColor(Ui.alpha(0xFFFFFFFF, f));
+                    c.drawRoundRect(r, rad, rad, frame);
+                }
+                if (popupChecked(i)) {
+                    float cr = 20 * k, ccx = r.right - cr - 10 * k, ccy = r.top + cr + 10 * k;
+                    Paint dot = new Paint(Paint.ANTI_ALIAS_FLAG);
+                    dot.setColor(0xFF0A84FF);
+                    c.drawCircle(ccx, ccy, cr, dot);
+                    Symbols.draw(getContext(), c, "check", ccx, ccy, 22 * k, 0xFFFFFFFF);
+                }
+            }
+            Paint hint = Ui.text(Ui.regular, 22 * k, fg(0x8CFFFFFF));
+            String name = popupFocus < names.size() ? Wallpapers.label(names.get(popupFocus)) : "";
+            c.drawText(name + Ui.tr("  ·  OK escolhe · Voltar fecha", "  ·  OK picks · Back closes"), left + pad * k, top + (ph - 26) * k, hint);
         }
 
         private List<String> wpNames() {
@@ -1083,6 +1184,10 @@ public class SettingsActivity extends Activity {
 
         /** A panel in the middle of the screen over a darkened list; the focused option in white. */
         private void drawPopup(Canvas c, float dt) {
+            if (popup == WP_PICK_POPUP) {
+                drawWpPicker(c, dt);
+                return;
+            }
             String[] options = popupOptions();
             boolean grid = popup == GENRE_POPUP || popup == LIVE_POPUP || popup == WP_PICK_POPUP;   // long lists in two columns
             int cols = grid ? 2 : 1, rows = (options.length + cols - 1) / cols;
@@ -1265,7 +1370,7 @@ public class SettingsActivity extends Activity {
         }
 
         private boolean popupKey(KeyEvent e, boolean down) {
-            int n = popupOptions().length, cols = popup == GENRE_POPUP || popup == LIVE_POPUP || popup == WP_PICK_POPUP ? 2 : 1;
+            int n = popupOptions().length, cols = popup == WP_PICK_POPUP ? WP_COLS : popup == GENRE_POPUP || popup == LIVE_POPUP ? 2 : 1;
             switch (e.getKeyCode()) {
                 case KeyEvent.KEYCODE_DPAD_UP:
                     if (down && popupFocus - cols >= 0) {
@@ -1328,6 +1433,7 @@ public class SettingsActivity extends Activity {
                                     syncWallpapers();
                                 } else {
                                     openPopup(WP_PICK_POPUP);
+                                    loadWpThumbs();
                                 }
                             } else {
                                 Prefs.setWallpaper(c, wpSaver, v);
