@@ -92,7 +92,7 @@ final class Diagnostics {
             section(b, adb, "Crashes", "logcat -d -b crash -v time");
             section(b, adb, "Log (everything since boot or as far back as the TV keeps)", "logcat -d -b main,system,events -v time");
         } catch (IOException e) {
-            b.append("== ADB unavailable: ").append(e.getMessage()).append('\n');
+            b.append("== ADB unavailable: ").append(e).append('\n');
         }
         return b.toString();
     }

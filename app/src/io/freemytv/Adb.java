@@ -105,6 +105,10 @@ final class Adb implements Closeable {
                     throw new IOException("the TV rejected the app's key");
                 }
             }
+        } catch (java.io.EOFException e) {
+            adb.close();
+            // Fire TV closes it this way when the app's key isn't allowed (no prompt shown).
+            throw new IOException("the TV's ADB closed the connection without asking for permission");
         } catch (IOException e) {
             adb.close();
             throw e;

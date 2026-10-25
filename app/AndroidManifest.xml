@@ -103,6 +103,18 @@
             </intent-filter>
         </service>
 
+        <!-- The screensaver as a plain screen, where it can't be the system's (Fire TV); opened by HomeButton. -->
+        <activity
+            android:name=".IdleSaver"
+            android:process=":home"
+            android:exported="false"
+            android:launchMode="singleInstance"
+            android:excludeFromRecents="true"
+            android:noHistory="true"
+            android:screenOrientation="landscape"
+            android:configChanges="keyboard|keyboardHidden|navigation|orientation|screenSize|screenLayout|smallestScreenSize|uiMode|density|fontScale|locale|layoutDirection"
+            android:theme="@style/FreeMyTV.Home" />
+
         <!-- Fire TV only: Fire OS ignores a new home screen, so this brings ours back when Amazon's shows up.
              Turned on and off by the mode switch, through the TV's ADB. -->
         <service

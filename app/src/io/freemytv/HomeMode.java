@@ -110,6 +110,10 @@ final class HomeMode {
 
     private static void applyFree(Context c) {
         JSONObject s = state(c);
+        if (HomeButton.fireTv() && !adbWorks(c, s)) {
+            switchWithoutAdb(c, FREE);
+            return;
+        }
         try (Adb adb = connect(c, s)) {
             // The TV's own home screen and screensaver, recorded once (before ours replace them) so "original" restores
             // exactly what was there, on any brand.
@@ -172,6 +176,10 @@ final class HomeMode {
 
     private static void applyOriginal(Context c) {
         JSONObject s = state(c);
+        if (HomeButton.fireTv() && !adbWorks(c, s)) {
+            switchWithoutAdb(c, ORIGINAL);
+            return;
+        }
         try (Adb adb = connect(c, s)) {
             busy(c, Ui.tr("Religando os apps…", "Turning the apps back on…"));
             String home = s.optString("originalHome", "");
@@ -197,6 +205,7 @@ final class HomeMode {
             s = state(c);
             restoreSetting(adb, "secure screensaver_enabled", s, "originalDreamEnabled");
             restoreSetting(adb, "system screen_off_timeout", s, "originalScreenTimeout");
+            restoreSetting(adb, "global stay_on_while_plugged_in", s, "originalStayOn");
             s.put("mode", ORIGINAL).put("since", System.currentTimeMillis()).put("homeReverted", false)
                     .put("disabled", new JSONArray(failed));
             save(c, s);
@@ -303,6 +312,8 @@ final class HomeMode {
                 latest.put("disabled", new JSONArray(sorted(disabled)));
                 save(app, latest);
             } catch (Exception e) {
+                // A Fire TV without ADB runs Free My TV through Accessibility alone: nothing to check.
+                if (HomeButton.fireTv()) return;
                 notice(app, Ui.tr("Não consegui conferir o Free My TV: ", "Couldn't check Free My TV: ") + e.getMessage());
                 return;
             }
@@ -328,6 +339,15 @@ final class HomeMode {
             adb.shell("settings put secure screensaver_components " + DREAM);
             changed = true;
         }
+        // "Stay awake while plugged in" (on in some boxes, the A13+ among them): the box is never idle, so no screensaver.
+        String stayOn = adb.shell("settings get global stay_on_while_plugged_in").trim();
+        if (!stayOn.equals("0") && !stayOn.equals("null") && !stayOn.isEmpty()) {
+            JSONObject s = state(c);
+            if (!s.has("originalStayOn")) s.put("originalStayOn", stayOn);
+            save(c, s);
+            adb.shell("settings put global stay_on_while_plugged_in 0");
+            changed = true;
+        }
         String enabled = adb.shell("settings get secure screensaver_enabled").trim();
         String timeout = adb.shell("settings get system screen_off_timeout").trim();
         long ms;
@@ -349,6 +369,42 @@ final class HomeMode {
         }
         save(c, s);
         return true;
+    }
+
+    private static boolean adbWorks(Context c, JSONObject s) {
+        try (Adb ignored = connect(c, s)) {
+            return true;
+        } catch (IOException e) {
+            AppLog.w("no ADB, switching without it: " + e.getMessage());
+            return false;
+        }
+    }
+
+    /**
+     * Fire TV whose ADB the app can't use: the mode only switches HomeButton on or off (it acts in Free My TV mode
+     * alone), which you turn on yourself once in Accessibility. Nothing is turned off, and the screensaver is ours
+     * through IdleSaver. Original: Amazon's home screen is back right away, the service just stays idle.
+     */
+    private static void switchWithoutAdb(Context c, String mode) {
+        try {
+            JSONObject s = state(c);
+            s.put("mode", mode).put("since", System.currentTimeMillis()).put("homeReverted", false);
+            save(c, s);
+        } catch (JSONException ignored) {}
+        if (FREE.equals(mode)) {
+            notice(c, Ui.tr("Free My TV ligado sem ADB: ative “Free My TV” em Acessibilidade para o botão Home abrir o novo Início.",
+                    "Free My TV is on without ADB: turn on “Free My TV” in Accessibility so Home opens the new home screen."));
+            done(c, null);
+            try {
+                c.startActivity(new android.content.Intent(android.provider.Settings.ACTION_ACCESSIBILITY_SETTINGS)
+                        .addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK));
+            } catch (RuntimeException e) {
+                AppLog.w("no accessibility settings: " + e.getMessage());
+            }
+        } else {
+            notice(c, Ui.tr("Modo original: o Início da Amazon está de volta.", "Original mode: Amazon's home screen is back."));
+            done(c, null);
+        }
     }
 
     /** Fire TV (Fire OS), told apart by Amazon's home screen. */
