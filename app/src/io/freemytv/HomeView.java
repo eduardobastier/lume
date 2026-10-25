@@ -475,7 +475,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         if (clockText.isEmpty() || lPill == null) return;
         RectF first = topRects[3];
         float h = first.height(), w = lPill.measureText(clockText) + 2 * 30 * k;
-        float right = first.left - L_BUTTON_GAP * k;
+        float right = (wxRight && wxShown ? weatherRect.left : first.left) - L_BUTTON_GAP * k;
         RectF r = pillRect;
         r.set(right - w, first.top, right, first.bottom);
         tmp.set(r);
@@ -2268,6 +2268,11 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         }
         for (Recs.Pick p : list) recs.backdrop(p);
         Backdrop b = cards.isEmpty() ? null : recs.backdrop(cards.get(0));
+        boolean right = Prefs.weatherRight(getContext());
+        if (right != wxRight) {
+            wxRight = right;
+            status.invalidate();
+        }
         boolean off = !Prefs.recsOn(getContext());
         if (off != recsOff) {
             recsOff = off;
@@ -2285,6 +2290,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
     private LinearGradient wallScrim;
     private float wallScrimNight = -1;
     private boolean recsOff;            // recommendations turned off: no tabs or cards, just the wallpaper
+    private boolean wxRight, wxShown;   // the weather pill next to the clock (Home Settings), and whether it's drawn
     private String wallName;            // the wallpaper shown (or being loaded)
     private Backdrop wallBackdrop;
     private boolean wallLoading;
@@ -2396,20 +2402,23 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
      */
     private void drawWeatherPill(Canvas c) {
         HomeData.Weather wx = data.weather;
-        if (Double.isNaN(wx.temp) || lWx == null || !Prefs.showWeather(getContext())) return;
+        wxShown = !Double.isNaN(wx.temp) && lWx != null && Prefs.showWeather(getContext());
+        if (!wxShown) return;
         lWx.setColor(tone(L_INK, 0xEBFFFFFF));
         String now = HomeData.degrees(wx.temp) + "  " + HomeData.condition(wx.code, wx.isDay);
         String symbol = Symbols.weather(wx.code, wx.isDay);
         float size = 36 * k, sw = Symbols.width(getContext(), symbol, size);
         float width = sw + 14 * k + lWx.measureText(now);
         float bh = L_BUTTON * k, cy = L_BUTTON_CY * k;
+        // In the middle, or on the right: after the clock, before the network button.
+        float mid = wxRight ? topRects[3].left - L_BUTTON_GAP * k - width / 2 - 30 * k : 960 * k;
         RectF r = weatherRect;
-        r.set(960 * k - width / 2 - 30 * k, cy - bh / 2, 960 * k + width / 2 + 30 * k, cy + bh / 2);
+        r.set(mid - width / 2 - 30 * k, cy - bh / 2, mid + width / 2 + 30 * k, cy + bh / 2);
         tmp.set(r);
         tmp.offset(0, 6 * k);
         drawShadow(c, tmp, bh / 2, 26 * k, Ui.alpha(0xFF000000, tone(0.1f, 0.3f)));
         scene.liquid(c, r, bh / 2, tone(0xFFFFFFFF, SMOKE), tone(0.55f, 0.5f), tone(0.02f, 0.01f), 12 * k, 8 * k, tone(0.6f, 0.45f), 1);
-        float x = 960 * k - width / 2, base = cy + Ui.halfCap(lWx);
+        float x = mid - width / 2, base = cy + Ui.halfCap(lWx);
         Symbols.draw(getContext(), c, symbol, x + sw / 2, base - Ui.halfCap(lWx), size, lWx.getColor());
         c.drawText(now, x + sw + 14 * k, base, lWx);
     }
@@ -2563,8 +2572,8 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
      */
     private void drawLightButtons(Canvas c) {
         applyTone();
-        drawClockPill(c);
         drawWeatherPill(c);
+        drawClockPill(c);
         for (int i = 0; i < lightButtons.size(); i++) {
             RectF r = topRects[3 + i];
             float f = Ui.clamp(topFocus[3 + i].value), s = 1 + 0.1f * f, rad = r.width() / 2 * s;

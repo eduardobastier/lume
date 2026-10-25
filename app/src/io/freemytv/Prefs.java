@@ -122,6 +122,11 @@ final class Prefs {
         ui(c).edit().putString(WP_KEYS[slot], value).apply();
     }
 
+    /** The weather pill at the top: true = right, next to the clock; false = in the middle. */
+    static boolean weatherRight(Context c) {
+        return ui(c).getBoolean("weather_right", false);
+    }
+
     static boolean showWeather(Context c) {
         return ui(c).getBoolean("weather", true);
     }

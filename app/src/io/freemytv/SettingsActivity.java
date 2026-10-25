@@ -228,12 +228,12 @@ public class SettingsActivity extends Activity {
     }
 
     static final class SettingsView extends View implements Choreographer.FrameCallback {
-        private static final int MAIN = 0, HOME_CHOICE = 1, RECS = 2, THEME = 3, SAVER = 4, WEATHER = 5, UPDATE = 6, WALL = 7, MAIN_ROWS = 9;
+        private static final int MAIN = 0, HOME_CHOICE = 1, RECS = 2, THEME = 3, SAVER = 4, WEATHER = 5, UPDATE = 6, WALL = 7, HOMESCR = 8, MAIN_ROWS = 4;
         /** How long the TV waits before the screensaver (Android's screen-off timeout), in minutes. */
         private static final int[] SAVER_MINUTES = {1, 2, 5, 10, 15, 30, 60};
         /** The popup over the list: none, the theme, the genres (several at once) or what OK on a card opens. */
         private static final int NO_POPUP = 0, THEME_POPUP = 1, GENRE_POPUP = 2, ACTION_POPUP = 3, LIVE_POPUP = 4, SAVER_POPUP = 5,
-                YES_NO_POPUP = 6, PLACE_POPUP = 7, WP_MODE_POPUP = 8, WP_PICK_POPUP = 9, WP_SOURCE_POPUP = 10, WP_ROTATE_POPUP = 11;
+                YES_NO_POPUP = 6, PLACE_POPUP = 7, WP_MODE_POPUP = 8, WP_PICK_POPUP = 9, WP_SOURCE_POPUP = 10, WP_ROTATE_POPUP = 11, BG_POPUP = 12, WX_POS_POPUP = 13;
         /** The on/off choice the Yes/No popup is for: its Prefs key and title. */
         private String yesNoKey = "", yesNoTitle = "";
         /** Live TV choices: [value, name], built when the popup opens (the TV's inputs and installed apps). */
@@ -398,7 +398,8 @@ public class SettingsActivity extends Activity {
             if (screen == HOME_CHOICE) return Ui.tr("Início", "Home Screen");
             if (screen == SAVER) return Ui.tr("Tela de Descanso", "Screensaver");
             if (screen == WEATHER) return Ui.tr("Previsão do Tempo", "Weather");
-            if (screen == UPDATE) return Ui.tr("Atualizações", "Updates");
+            if (screen == UPDATE) return Ui.tr("Sistema", "System");
+            if (screen == HOMESCR) return Ui.tr("Tela Inicial", "Home Screen");
             if (screen == WALL) return Ui.tr("Papel de Parede", "Wallpaper");
             return Ui.tr("Ajustes do Início", "Home Settings");
         }
@@ -412,7 +413,8 @@ public class SettingsActivity extends Activity {
         }
 
         private int rowCount() {
-            return screen == MAIN ? MAIN_ROWS : screen == RECS ? recsRows().length : screen == THEME ? 3 : screen == WEATHER ? 3 : screen == WALL ? 6 : screen == UPDATE ? updateRows() : 2;
+            return screen == MAIN ? MAIN_ROWS : screen == RECS ? 5 : screen == THEME ? 3 : screen == WEATHER ? 4 : screen == WALL ? 5
+                    : screen == UPDATE ? updateRows() : screen == HOMESCR ? 6 : screen == SAVER ? 3 : 2;
         }
 
         @Override protected void onDraw(Canvas c) {
@@ -443,6 +445,7 @@ public class SettingsActivity extends Activity {
             else if (screen == WEATHER) drawWeatherScreen(c);
             else if (screen == UPDATE) drawUpdateScreen(c);
             else if (screen == WALL) drawWallScreen(c);
+            else if (screen == HOMESCR) drawHomeScreen(c);
             else drawChoice(c);
             if (popup != NO_POPUP) drawPopup(c, dt);
         }
@@ -451,11 +454,10 @@ public class SettingsActivity extends Activity {
             boolean working = busy();
             String busyText = state.optString("busy");
             String mode = freeActive() ? "Free My TV" : Ui.tr("Original", "Original");
-            String[] labels = {Ui.tr("Início", "Home Screen"), Ui.tr("Tela de Descanso", "Screensaver"), Ui.tr("Tema", "Theme"),
-                    Ui.tr("Previsão do tempo", "Weather"), Ui.tr("TV ao Vivo", "Live TV"), Ui.tr("Sons ao navegar", "Navigation sounds"),
-                    Ui.tr("Recomendações", "Recommendations"), Ui.tr("Atualizações", "Updates"), Ui.tr("Ajustes da TV", "TV Settings")};
-            String[] values = {working ? "" : mode, saverName(), themes()[HomeView.theme(getContext())], weatherName(),
-                    liveName(), Prefs.sounds(getContext()) ? Ui.tr("Sim", "On") : Ui.tr("Não", "Off"), "", updateName(), ""};
+            String[] labels = {Ui.tr("Início", "Home"), Ui.tr("Tela inicial", "Home screen"), Ui.tr("Tela de descanso", "Screensaver"),
+                    Ui.tr("Sistema", "System")};
+            String[] values = {working ? "" : mode, themes()[HomeView.theme(getContext())] + " · " + backgroundName(), saverName(),
+                    updateName()};
             for (int i = 0; i < MAIN_ROWS; i++) {
                 float y = (LIST_TOP + i * (ROW_H + ROW_GAP)) * k;
                 rowRect.set(LIST_X * k, y, LIST_R * k, y + ROW_H * k);
@@ -560,8 +562,7 @@ public class SettingsActivity extends Activity {
         private static final int R_SHOW = 0, R_KEY = 1, R_GENRES = 2, R_RECENT = 3, R_ANY = 4, R_ACTION = 5, R_WALL = 6;
 
         private int[] recsRows() {
-            return Prefs.recsOn(getContext()) ? new int[] {R_SHOW, R_KEY, R_GENRES, R_RECENT, R_ANY, R_ACTION}
-                    : new int[] {R_SHOW, R_WALL};
+            return new int[] {R_KEY, R_GENRES, R_RECENT, R_ANY, R_ACTION};
         }
 
         private void drawRecsScreen(Canvas c) {
@@ -620,16 +621,15 @@ public class SettingsActivity extends Activity {
             int n = Wallpapers.names(ctx).size();
             String[] labels = {Ui.tr("Fonte", "Source"), Ui.tr("Imagens", "Images"), Ui.tr("Imagens na troca", "Images that rotate"),
                     Ui.tr("Modo claro", "Light mode"),
-                    Ui.tr("Modo escuro", "Dark mode"), Ui.tr("Tela de descanso", "Screensaver")};
+                    Ui.tr("Modo escuro", "Dark mode")};
             String count = wpSyncing ? Ui.tr("Sincronizando…", "Syncing…") : !wpStatus.isEmpty() ? wpStatus
                     : n == 0 ? Ui.tr("Nenhuma ainda", "None yet") : n + Ui.tr(n == 1 ? " imagem" : " imagens", n == 1 ? " image" : " images");
             List<String> all = Wallpapers.names(ctx);
             int rotating = Wallpapers.rotation(ctx, all).size();
             String inRotation = all.isEmpty() ? "—" : rotating == all.size() ? Ui.tr("Todas", "All")
                     : rotating + Ui.tr(" de ", " of ") + all.size();
-            String[] values = {Wallpapers.sourceName(ctx), count, inRotation, wallName(Prefs.WP_LIGHT), wallName(Prefs.WP_DARK),
-                    wallName(Prefs.WP_SAVER)};
-            for (int i = 0; i < 6; i++) {
+            String[] values = {Wallpapers.sourceName(ctx), count, inRotation, wallName(Prefs.WP_LIGHT), wallName(Prefs.WP_DARK)};
+            for (int i = 0; i < 5; i++) {
                 float y = (LIST_TOP + 20 + i * (ROW_H + ROW_GAP)) * k;
                 rowRect.set(LIST_X * k, y, LIST_R * k, y + ROW_H * k);
                 float f = drawRowBackground(c, i);
@@ -641,10 +641,9 @@ public class SettingsActivity extends Activity {
             Paint hint = Ui.text(Ui.regular, 23 * k, fg(0x8CFFFFFF));
             String note = Ui.tr("Baixadas na TV (até 12), nada vem dentro do app. Atualiza a cada 3 h.",
                     "Downloaded on the TV (up to 12); none come with the app. Refreshed every 3 h.");
-            c.drawText(note, LIST_X * k + 30 * k, (LIST_TOP + 20 + 6 * (ROW_H + ROW_GAP) + 40) * k, hint);
-            String more = Prefs.recsOn(ctx) ? Ui.tr("Aparece com as recomendações desligadas.", "Shows when the recommendations are off.")
-                    : Ui.tr("OK em Imagens sincroniza agora.", "OK on Images syncs now.");
-            c.drawText(more, LIST_X * k + 30 * k, (LIST_TOP + 20 + 6 * (ROW_H + ROW_GAP) + 80) * k, hint);
+            c.drawText(note, LIST_X * k + 30 * k, (LIST_TOP + 20 + 5 * (ROW_H + ROW_GAP) + 40) * k, hint);
+            String more = Ui.tr("OK em Imagens sincroniza agora.", "OK on Images syncs now.");
+            c.drawText(more, LIST_X * k + 30 * k, (LIST_TOP + 20 + 5 * (ROW_H + ROW_GAP) + 80) * k, hint);
         }
 
         private void syncWallpapers() {
@@ -833,16 +832,17 @@ public class SettingsActivity extends Activity {
 
         /** Screensaver: preview it, and how long the TV waits before it starts. */
         private void drawSaverScreen(Canvas c) {
-            String[] labels = {Ui.tr("Ver agora", "Preview"), Ui.tr("Começar após", "Start after")};
-            String[] values = {"", minutes(saverMinutes()) + Ui.tr(" sem usar o controle", " without using the remote")};
-            for (int i = 0; i < 2; i++) {
+            String[] labels = {Ui.tr("Ver agora", "Preview"), Ui.tr("Começar após", "Start after"), Ui.tr("Imagem", "Image")};
+            String[] values = {"", minutes(saverMinutes()) + Ui.tr(" sem usar o controle", " without using the remote"),
+                    Prefs.recsOn(getContext()) ? Ui.tr("Fotos das recomendações", "The recommendations' photos") : wallName(Prefs.WP_SAVER)};
+            for (int i = 0; i < 3; i++) {
                 float y = (LIST_TOP + 20 + i * (ROW_H + ROW_GAP)) * k;
                 rowRect.set(LIST_X * k, y, LIST_R * k, y + ROW_H * k);
                 float f = drawRowBackground(c, i);
                 rowLabel.setColor(blend(fg(0xF2FFFFFF), INK, f));
                 float base = rowRect.centerY() + Ui.halfCap(rowLabel);
                 c.drawText(labels[i], rowRect.left + 30 * k, base, rowLabel);
-                if (i == 1) valueAndChevron(c, values[i], base, f);
+                if (i >= 1) valueAndChevron(c, values[i], base, f);
             }
             int sleep = android.provider.Settings.Secure.getInt(getContext().getContentResolver(), "sleep_timeout", -1);
             Paint hint = Ui.text(Ui.regular, 23 * k, fg(0x8CFFFFFF));
@@ -850,7 +850,37 @@ public class SettingsActivity extends Activity {
                     ? Ui.tr("A TV desliga antes (Ajustes da TV → Energia): a tela de descanso não chega a aparecer.",
                             "The TV turns off first (TV Settings → Power): the screensaver won't show.")
                     : Ui.tr("Vale para a TV toda, como nos Ajustes da TV.", "Applies to the whole TV, like TV Settings.");
-            c.drawText(note, LIST_X * k + 30 * k, (LIST_TOP + 20 + 2 * (ROW_H + ROW_GAP) + 40) * k, hint);
+            c.drawText(note, LIST_X * k + 30 * k, (LIST_TOP + 20 + 3 * (ROW_H + ROW_GAP) + 40) * k, hint);
+        }
+
+        // MARK: Home screen: theme, background (recommendations or wallpaper), weather, sounds, Live TV
+
+        private String backgroundName() {
+            return Prefs.recsOn(getContext()) ? Ui.tr("Recomendações", "Recommendations") : Ui.tr("Papel de parede", "Wallpaper");
+        }
+
+        private void drawHomeScreen(Canvas c) {
+            Context ctx = getContext();
+            boolean recsOn = Prefs.recsOn(ctx);
+            String[] labels = {Ui.tr("Tema", "Theme"), Ui.tr("Fundo", "Background"),
+                    recsOn ? Ui.tr("Recomendações", "Recommendations") : Ui.tr("Papel de parede", "Wallpaper"),
+                    Ui.tr("Previsão do tempo", "Weather"), Ui.tr("Sons ao navegar", "Navigation sounds"), Ui.tr("TV ao Vivo", "Live TV")};
+            String[] values = {themes()[HomeView.theme(ctx)], backgroundName(),
+                    recsOn ? (hasKey ? Prefs.genreNames(ctx) : Ui.tr("Sem chave do TMDB", "No TMDB key")) : Wallpapers.sourceName(ctx),
+                    weatherName(), Prefs.sounds(ctx) ? Ui.tr("Sim", "On") : Ui.tr("Não", "Off"), liveName()};
+            for (int i = 0; i < 6; i++) {
+                float y = (LIST_TOP + 20 + i * (ROW_H + ROW_GAP)) * k;
+                rowRect.set(LIST_X * k, y, LIST_R * k, y + ROW_H * k);
+                float f = drawRowBackground(c, i);
+                rowLabel.setColor(blend(fg(0xF2FFFFFF), INK, f));
+                float base = rowRect.centerY() + Ui.halfCap(rowLabel);
+                c.drawText(labels[i], rowRect.left + 30 * k, base, rowLabel);
+                valueAndChevron(c, values[i], base, f);
+            }
+            Paint hint = Ui.text(Ui.regular, 23 * k, fg(0x8CFFFFFF));
+            c.drawText(Ui.tr("TV ao Vivo: o app do atalho de TV ao Vivo, na gaveta de baixo.",
+                    "Live TV: the app of the Live TV shortcut, in the bottom drawer."),
+                    LIST_X * k + 30 * k, (LIST_TOP + 20 + 6 * (ROW_H + ROW_GAP) + 40) * k, hint);
         }
 
         // MARK: Updates (GitHub releases)
@@ -950,15 +980,15 @@ public class SettingsActivity extends Activity {
 
         /** Updates: version, check/install, and "Send diagnostics" when this APK has a topic for it. */
         private int updateRows() {
-            return Diagnostics.enabled() ? 3 : 2;
+            return 4;
         }
 
         private void drawUpdateScreen(Canvas c) {
             String[] labels = {Ui.tr("Versão instalada", "Installed version"),
                     release != null && Updater.newer(release.tag, Updater.currentVersion(getContext()))
                             ? Ui.tr("Atualizar agora", "Update now") : Ui.tr("Procurar atualização", "Check for updates"),
-                    Ui.tr("Enviar diagnóstico", "Send diagnostics")};
-            String[] values = {Updater.currentVersion(getContext()), updateStatus, diagStatus};
+                    Ui.tr("Enviar diagnóstico", "Send diagnostics"), Ui.tr("Ajustes da TV", "TV Settings")};
+            String[] values = {Updater.currentVersion(getContext()), updateStatus, Diagnostics.enabled() ? diagStatus : Ui.tr("Desligado neste APK", "Off in this APK"), ""};
             for (int i = 0; i < updateRows(); i++) {
                 float y = (LIST_TOP + 20 + i * (ROW_H + ROW_GAP)) * k;
                 rowRect.set(LIST_X * k, y, LIST_R * k, y + ROW_H * k);
@@ -1019,12 +1049,12 @@ public class SettingsActivity extends Activity {
         private void drawWeatherScreen(Canvas c) {
             Context ctx = getContext();
             String[] labels = {Ui.tr("Mostrar previsão", "Show weather"), Ui.tr("Localização", "Location"),
-                    Ui.tr("Cidade", "City")};
+                    Ui.tr("Cidade", "City"), Ui.tr("Posição no topo", "Place at the top")};
             String city = Prefs.weatherCityName(ctx);
             String[] values = {Prefs.showWeather(ctx) ? Ui.tr("Sim", "On") : Ui.tr("Não", "Off"),
                     Prefs.manualWeather(ctx) ? Ui.tr("Cidade escolhida", "Chosen city") : Ui.tr("Automática (internet)", "Automatic (internet)"),
-                    city.isEmpty() ? Ui.tr("Nenhuma", "None") : city};
-            for (int i = 0; i < 3; i++) {
+                    city.isEmpty() ? Ui.tr("Nenhuma", "None") : city, wxPosNames()[Prefs.weatherRight(ctx) ? 1 : 0]};
+            for (int i = 0; i < 4; i++) {
                 float y = (LIST_TOP + 20 + i * (ROW_H + ROW_GAP)) * k;
                 rowRect.set(LIST_X * k, y, LIST_R * k, y + ROW_H * k);
                 float f = drawRowBackground(c, i);
@@ -1036,7 +1066,11 @@ public class SettingsActivity extends Activity {
             Paint hint = Ui.text(Ui.regular, 23 * k, fg(0x8CFFFFFF));
             String now = HomeData.get(ctx).city;
             c.drawText(Ui.tr("Agora: ", "Now: ") + (now.isEmpty() ? "—" : now) + Ui.tr(" · o pôr do sol daqui troca o tema", " · its sunset switches the theme"),
-                    LIST_X * k + 30 * k, (LIST_TOP + 20 + 3 * (ROW_H + ROW_GAP) + 40) * k, hint);
+                    LIST_X * k + 30 * k, (LIST_TOP + 20 + 4 * (ROW_H + ROW_GAP) + 40) * k, hint);
+        }
+
+        private String[] wxPosNames() {
+            return new String[] {Ui.tr("No centro", "In the middle"), Ui.tr("Ao lado do relógio", "Next to the clock")};
         }
 
         /** Saves the wait with the TV's own ADB (this app may not write system settings itself). */
@@ -1158,6 +1192,8 @@ public class SettingsActivity extends Activity {
             if (popup == WP_PICK_POPUP) return Ui.tr("Imagem fixa", "Fixed image");
             if (popup == WP_ROTATE_POPUP) return Ui.tr("Imagens na troca", "Images that rotate");
             if (popup == WP_SOURCE_POPUP) return Ui.tr("Fonte das imagens", "Image source");
+            if (popup == BG_POPUP) return Ui.tr("Fundo", "Background");
+            if (popup == WX_POS_POPUP) return Ui.tr("Posição no topo", "Place at the top");
             return popup == THEME_POPUP ? Ui.tr("Tema", "Theme") : popup == GENRE_POPUP ? Ui.tr("Categorias", "Genres")
                     : Ui.tr("Ao apertar OK no card", "OK on a card");
         }
@@ -1170,6 +1206,8 @@ public class SettingsActivity extends Activity {
                     Ui.tr("Cidade escolhida", "Chosen city")};
             if (popup == WP_MODE_POPUP) return wpModeOptions();
             if (popup == WP_SOURCE_POPUP) return wpSources();
+            if (popup == BG_POPUP) return new String[] {Ui.tr("Recomendações", "Recommendations"), Ui.tr("Papel de parede", "Wallpaper")};
+            if (popup == WX_POS_POPUP) return wxPosNames();
             if (popup == WP_PICK_POPUP || popup == WP_ROTATE_POPUP) {
                 List<String> names = wpNames();
                 String[] out = new String[names.size()];
@@ -1204,6 +1242,8 @@ public class SettingsActivity extends Activity {
             }
             if (popup == WP_PICK_POPUP) return Prefs.wallpaper(getContext(), wpSlot).equals("fixed:" + wpNames().get(i));
             if (popup == WP_SOURCE_POPUP) return wpSourceIndex() == i;
+            if (popup == BG_POPUP) return Prefs.recsOn(getContext()) == (i == 0);
+            if (popup == WX_POS_POPUP) return Prefs.weatherRight(getContext()) == (i == 1);
             if (popup == WP_ROTATE_POPUP) return !Prefs.wallpaperSkip(getContext()).contains(wpNames().get(i));
             return Prefs.genres(getContext()).contains(Prefs.GENRES[i][0]);
         }
@@ -1291,7 +1331,7 @@ public class SettingsActivity extends Activity {
             popup = kind;
             popupFocus = kind == THEME_POPUP ? HomeView.theme(getContext()) : kind == ACTION_POPUP ? actionIndex() : 0;
             if (kind == LIVE_POPUP || kind == SAVER_POPUP || kind == YES_NO_POPUP || kind == PLACE_POPUP || kind == WP_MODE_POPUP
-                    || kind == WP_PICK_POPUP || kind == WP_SOURCE_POPUP) {
+                    || kind == WP_PICK_POPUP || kind == WP_SOURCE_POPUP || kind == BG_POPUP || kind == WX_POS_POPUP) {
                 for (int i = 0; i < popupOptions().length; i++) if (popupChecked(i)) popupFocus = i;
             }
             for (Spring s : popupPop) s.snap(0);
@@ -1375,16 +1415,7 @@ public class SettingsActivity extends Activity {
                         if (e.getRepeatCount() == 0) backDown = true;
                     } else {
                         if (backDown && !e.isCanceled()) {
-                            if (screen == WALL) {
-                                screen = RECS;
-                                focus = 1;      // Wallpaper, the row under "Show recommendations: Off"
-                                for (Spring s : pop) s.snap(0);
-                                invalidate();
-                                return true;
-                            }
-                            focus = screen == RECS ? 6 : screen == THEME ? 2 : screen == SAVER ? 1 : screen == WEATHER ? 3
-                                    : screen == UPDATE ? 7 : 0;
-                            screen = MAIN;
+                            goBack();
                         }
                         backDown = false;
                     }
@@ -1471,6 +1502,13 @@ public class SettingsActivity extends Activity {
                             else if (popupFocus == 1) setWallpaperSource("wallhaven:");
                             else if (popupFocus == 2) activity.askWallhaven();
                             else setWallpaperSource("github");
+                        } else if (popup == BG_POPUP) {
+                            Prefs.set(c, "recs_on", popupFocus == 0);
+                            popup = NO_POPUP;
+                            if (popupFocus == 1 && Wallpapers.names(c).isEmpty()) syncWallpapers();
+                        } else if (popup == WX_POS_POPUP) {
+                            Prefs.set(c, "weather_right", popupFocus == 1);
+                            popup = NO_POPUP;
                         } else if (popup == WP_ROTATE_POPUP) {
                             Prefs.toggleWallpaperSkip(c, wpNames().get(popupFocus));     // stays open: tick several
                         } else if (popup == WP_PICK_POPUP) {
@@ -1496,6 +1534,24 @@ public class SettingsActivity extends Activity {
             return true;
         }
 
+        /** One level up: Home screen's submenus go back to it, the rest to the main list (on the row they came from). */
+        private void goBack() {
+            if (screen == THEME || screen == RECS || screen == WALL || screen == WEATHER) {
+                focus = screen == THEME ? 0 : screen == WEATHER ? 3 : 2;
+                screen = HOMESCR;
+            } else {
+                focus = screen == HOMESCR ? 1 : screen == SAVER ? 2 : screen == UPDATE ? 3 : 0;
+                screen = MAIN;
+            }
+            for (Spring s : pop) s.snap(0);
+        }
+
+        private void open(int to, int at) {
+            screen = to;
+            focus = at;
+            for (Spring s : pop) s.snap(0);
+        }
+
         private void activate() {
             Context c = getContext();
             if (screen == THEME) {
@@ -1504,40 +1560,34 @@ public class SettingsActivity extends Activity {
                     light = !light;
                     initPaints();
                 }
-                screen = MAIN;
-                focus = 2;
-                for (Spring s : pop) s.snap(0);
-                invalidate();
-                return;
-            }
-            if (screen == HOME_CHOICE) {
+                goBack();
+            } else if (screen == HOME_CHOICE) {
                 boolean wantFree = focus == 0;
                 if (wantFree != freeActive() && !busy()) {
                     HomeMode.request(c, wantFree ? HomeMode.FREE : HomeMode.ORIGINAL);
                     pendingAt = SystemClock.uptimeMillis();
                 }
-                screen = MAIN;
-                focus = 0;
+                goBack();
             } else if (screen == UPDATE) {
                 if (focus == 1) installUpdate();
-                else if (focus == 2) sendDiagnostics();
-                invalidate();
-                return;
+                else if (focus == 2 && Diagnostics.enabled()) sendDiagnostics();
+                else if (focus == 3) activity.startActivity(new Intent(Settings.ACTION_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
             } else if (screen == WEATHER) {
                 if (focus == 0) openYesNo("weather", Ui.tr("Mostrar previsão", "Show weather"));
                 else if (focus == 1) openPopup(PLACE_POPUP);
-                else activity.askCity();
-                invalidate();
-                return;
+                else if (focus == 2) activity.askCity();
+                else openPopup(WX_POS_POPUP);
             } else if (screen == SAVER) {
                 if (focus == 0) {
                     pause();
                     activity.showPreview();
-                } else {
+                } else if (focus == 1) {
                     openPopup(SAVER_POPUP);
+                } else {
+                    wpSlot = Prefs.WP_SAVER;
+                    if (Wallpapers.names(c).isEmpty()) syncWallpapers();
+                    openPopup(WP_MODE_POPUP);
                 }
-                invalidate();
-                return;
             } else if (screen == WALL) {
                 if (focus == 0) openPopup(WP_SOURCE_POPUP);
                 else if (focus == 1) syncWallpapers();
@@ -1549,56 +1599,43 @@ public class SettingsActivity extends Activity {
                         loadWpThumbs();
                     }
                 } else {
-                    wpSlot = focus == 3 ? Prefs.WP_LIGHT : focus == 4 ? Prefs.WP_DARK : Prefs.WP_SAVER;
+                    wpSlot = focus == 3 ? Prefs.WP_LIGHT : Prefs.WP_DARK;
                     openPopup(WP_MODE_POPUP);
                 }
-                invalidate();
-                return;
             } else if (screen == RECS) {
                 int row = recsRows()[Math.min(focus, recsRows().length - 1)];
                 if (row == R_KEY) activity.askTmdbKey();
                 else if (row == R_GENRES) openPopup(GENRE_POPUP);
                 else if (row == R_RECENT) openYesNo("recs_recent", Ui.tr("Só lançamentos", "New releases only"));
                 else if (row == R_ANY) openYesNo("recs_all", Ui.tr("Em qualquer streaming", "On any streaming service"));
-                else if (row == R_ACTION) openPopup(ACTION_POPUP);
-                else if (row == R_SHOW) openYesNo("recs_on", Ui.tr("Mostrar recomendações", "Show recommendations"));
+                else openPopup(ACTION_POPUP);
+            } else if (screen == HOMESCR) {
+                if (focus == 0) open(THEME, HomeView.theme(c));
+                else if (focus == 1) openPopup(BG_POPUP);
+                else if (focus == 2) {
+                    if (Prefs.recsOn(c)) {
+                        open(RECS, 0);
+                    } else {
+                        open(WALL, 0);
+                        if (Wallpapers.names(c).isEmpty()) syncWallpapers();
+                    }
+                } else if (focus == 3) open(WEATHER, 0);
+                else if (focus == 4) openYesNo("sounds", Ui.tr("Sons ao navegar", "Navigation sounds"));
                 else {
-                    screen = WALL;
-                    focus = 0;
-                    for (Spring s : pop) s.snap(0);
-                    if (Wallpapers.names(c).isEmpty()) syncWallpapers();
+                    liveChoices = liveChoices();
+                    openPopup(LIVE_POPUP);
                 }
-                invalidate();
-                return;
             } else if (focus == 0) {
                 if (busy()) return;
-                screen = HOME_CHOICE;
-                focus = freeActive() ? 0 : 1;
+                open(HOME_CHOICE, freeActive() ? 0 : 1);
             } else if (focus == 1) {
-                screen = SAVER;
-                focus = 0;
+                open(HOMESCR, 0);
             } else if (focus == 2) {
-                screen = THEME;
-                focus = HomeView.theme(c);
-            } else if (focus == 3) {
-                screen = WEATHER;
-                focus = 0;
-            } else if (focus == 4) {
-                liveChoices = liveChoices();
-                openPopup(LIVE_POPUP);
-            } else if (focus == 5) {
-                openYesNo("sounds", Ui.tr("Sons ao navegar", "Navigation sounds"));
-            } else if (focus == 6) {
-                screen = RECS;
-                focus = 0;
-            } else if (focus == 7) {
-                screen = UPDATE;
-                focus = 1;
-                checkUpdate();
+                open(SAVER, 0);
             } else {
-                activity.startActivity(new Intent(Settings.ACTION_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
+                open(UPDATE, 1);
+                checkUpdate();
             }
-            for (Spring s : pop) s.snap(0);
             invalidate();
         }
     }
