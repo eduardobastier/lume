@@ -21,8 +21,8 @@ import android.view.accessibility.AccessibilityEvent;
  *   known package, or whatever Home resolves to on this model).
  * - on Fire TV, where only Amazon's screensaver may be the system's, opens ours (IdleSaver) after IDLE_MS without a
  *   key and with nothing playing; 4 min, so it comes before Amazon's (5 min by default).
- * It reads nothing on the screen; other keys are only timed, never kept. HomeMode turns it on and off with the mode
- * (through ADB); on a Fire TV without ADB you turn it on yourself in Accessibility.
+ * It reads nothing on the screen; other keys are only timed, never kept. It's turned on once with ENABLE_COMMAND
+ * (Fire OS has no switch for it); then the mode decides whether it acts.
  */
 public class HomeButton extends AccessibilityService {
     static final String AMAZON_HOME = "com.amazon.tv.launcher";
