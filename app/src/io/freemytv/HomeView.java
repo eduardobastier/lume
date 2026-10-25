@@ -389,10 +389,9 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         motionDirty = true;
     }
 
-    /** The three corner buttons, with their names in the current language. */
+    /** The corner buttons (network and Settings), with their names in the current language. */
     private void makeLightButtons() {
         lightButtons.clear();
-        lightButtons.add(HomeApps.action(HomeApps.LIVE_TV, "live", Ui.tr("TV ao Vivo", "Live TV"), "live_tv"));
         lightButtons.add(HomeApps.action(HomeApps.NETWORK, "network", netLabel(), "network"));
         lightButtons.add(HomeApps.action(HomeApps.SETTINGS, "settings", Ui.tr("Configurações", "Settings"), "settings"));
     }
@@ -402,7 +401,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
     private static final int NET_NONE = 0, NET_WIFI = 1, NET_CABLE = 2;
     private int net = -1;
     private Paint lPill, netStroke;
-    private final RectF pillRect = new RectF(), arcRect = new RectF();
+    private final RectF pillRect = new RectF(), arcRect = new RectF(), weatherRect = new RectF();
     private final android.graphics.Path netPath = new android.graphics.Path();
 
     /** Wi‑Fi, cable or no internet, from the active network (checked on resume and every 15 s). */
@@ -420,7 +419,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         }
         if (now == net) return false;
         net = now;
-        if (lightButtons.size() > 1) lightButtons.get(1).label = netLabel();
+        for (HomeApps.Item it : lightButtons) if (it.kind == HomeApps.NETWORK) it.label = netLabel();
         return true;
     }
 
@@ -2163,7 +2162,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
             x = topRects[i].right + 4 * k;
         }
         float b = L_BUTTON * k, right = CONTENT_R * k, cy = L_BUTTON_CY * k;
-        for (int i = 2; i >= 0; i--) {
+        for (int i = lightButtons.size() - 1; i >= 0; i--) {
             topRects[3 + i].set(right - b, cy - b / 2, right, cy + b / 2);
             right -= b + L_BUTTON_GAP * k;
         }
@@ -2391,16 +2390,26 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         if (night > 0.001f) drawImage(c, b.nightImage, alpha * night);
     }
 
-    /** Top center: the weather now, in one line (icon, temperature and sky). */
-    private void drawWeatherSummary(Canvas c) {
+    /**
+     * Top center: the weather now in one line (icon, temperature and sky), in a glass pill like the clock and the
+     * buttons on the right.
+     */
+    private void drawWeatherPill(Canvas c) {
         HomeData.Weather wx = data.weather;
         if (Double.isNaN(wx.temp) || lWx == null || !Prefs.showWeather(getContext())) return;
-        lWx.setColor(tone(L_INK, WHITE));
+        lWx.setColor(tone(L_INK, 0xEBFFFFFF));
         String now = HomeData.degrees(wx.temp) + "  " + HomeData.condition(wx.code, wx.isDay);
         String symbol = Symbols.weather(wx.code, wx.isDay);
         float size = 36 * k, sw = Symbols.width(getContext(), symbol, size);
         float width = sw + 14 * k + lWx.measureText(now);
-        float x = 960 * k - width / 2, base = 102 * k + Ui.halfCap(lWx);   // level with the round buttons on the right
+        float bh = L_BUTTON * k, cy = L_BUTTON_CY * k;
+        RectF r = weatherRect;
+        r.set(960 * k - width / 2 - 30 * k, cy - bh / 2, 960 * k + width / 2 + 30 * k, cy + bh / 2);
+        tmp.set(r);
+        tmp.offset(0, 6 * k);
+        drawShadow(c, tmp, bh / 2, 26 * k, Ui.alpha(0xFF000000, tone(0.1f, 0.3f)));
+        scene.liquid(c, r, bh / 2, tone(0xFFFFFFFF, SMOKE), tone(0.55f, 0.5f), tone(0.02f, 0.01f), 12 * k, 8 * k, tone(0.6f, 0.45f), 1);
+        float x = 960 * k - width / 2, base = cy + Ui.halfCap(lWx);
         Symbols.draw(getContext(), c, symbol, x + sw / 2, base - Ui.halfCap(lWx), size, lWx.getColor());
         c.drawText(now, x + sw + 14 * k, base, lWx);
     }
@@ -2411,7 +2420,6 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
             String hello = Ui.tr("Para você", "For You");
             c.drawText(hello, MARGIN * k - Ui.leftBearing(lTitle, hello), L_TITLE_BASE * k, lTitle);
         }
-        drawWeatherSummary(c);
         if (recsOff) {
             drawQuotes(c);
             return;
@@ -2556,7 +2564,8 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
     private void drawLightButtons(Canvas c) {
         applyTone();
         drawClockPill(c);
-        for (int i = 0; i < 3; i++) {
+        drawWeatherPill(c);
+        for (int i = 0; i < lightButtons.size(); i++) {
             RectF r = topRects[3 + i];
             float f = Ui.clamp(topFocus[3 + i].value), s = 1 + 0.1f * f, rad = r.width() / 2 * s;
             cell.set(r.centerX() - rad, r.centerY() - rad, r.centerX() + rad, r.centerY() + rad);
@@ -2611,7 +2620,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
                 break;
             case Z_TOP:
                 if (dx != 0) {
-                    int next = Math.max(recsOff ? 3 : 0, Math.min(5, topIndex + dx));
+                    int next = Math.max(recsOff ? 3 : 0, Math.min(2 + lightButtons.size(), topIndex + dx));
                     if (next == topIndex) return true;
                     topIndex = next;
                     if (topIndex < 3) selectTab(topIndex);   // like Apple TV tabs: focusing a tab selects it

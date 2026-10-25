@@ -94,8 +94,17 @@ final class Wallpapers {
         try {
             minutes = Math.max(1, Integer.parseInt(choice.substring(choice.indexOf(':') + 1)));
         } catch (RuntimeException ignored) {}
+        List<String> pool = rotation(c, names);
         long period = System.currentTimeMillis() / (minutes * 60_000L);
-        return new File(dir(c), names.get((int) (period % names.size())));
+        return new File(dir(c), pool.get((int) (period % pool.size())));
+    }
+
+    /** The images that take turns: all but the ones unticked in Home Settings (all of them if none is left). */
+    static List<String> rotation(Context c, List<String> names) {
+        Set<String> skip = Prefs.wallpaperSkip(c);
+        List<String> out = new ArrayList<>();
+        for (String n : names) if (!skip.contains(n)) out.add(n);
+        return out.isEmpty() ? names : out;
     }
 
     /** In the background: syncs with the repository if it's been a while (or `force`). Calls `done` after, if any. */

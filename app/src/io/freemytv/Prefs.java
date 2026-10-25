@@ -5,7 +5,9 @@ import android.content.SharedPreferences;
 
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 import java.util.Locale;
 
 /**
@@ -103,6 +105,17 @@ final class Prefs {
 
     static void setWallpaperSource(Context c, String value) {
         ui(c).edit().putString("wp_source", value).apply();
+    }
+
+    /** Wallpapers left out of the rotation (by name); new images join it on their own. */
+    static Set<String> wallpaperSkip(Context c) {
+        return new HashSet<>(ui(c).getStringSet("wp_skip", new HashSet<>()));
+    }
+
+    static void toggleWallpaperSkip(Context c, String name) {
+        Set<String> skip = wallpaperSkip(c);
+        if (!skip.remove(name)) skip.add(name);
+        ui(c).edit().putStringSet("wp_skip", skip).apply();
     }
 
     static void setWallpaper(Context c, int slot, String value) {
