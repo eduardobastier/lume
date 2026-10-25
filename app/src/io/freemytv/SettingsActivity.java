@@ -401,7 +401,7 @@ public class SettingsActivity extends Activity {
         }
 
         private int rowCount() {
-            return screen == MAIN ? MAIN_ROWS : screen == RECS ? 5 : screen == THEME ? 3 : screen == WEATHER ? 3 : 2;   // UPDATE: 2
+            return screen == MAIN ? MAIN_ROWS : screen == RECS ? 5 : screen == THEME ? 3 : screen == WEATHER ? 3 : screen == UPDATE ? updateRows() : 2;
         }
 
         @Override protected void onDraw(Canvas c) {
@@ -698,19 +698,25 @@ public class SettingsActivity extends Activity {
             }).start();
         }
 
+        /** Updates: version, check/install, and "Send diagnostics" when this APK has a topic for it. */
+        private int updateRows() {
+            return Diagnostics.enabled() ? 3 : 2;
+        }
+
         private void drawUpdateScreen(Canvas c) {
             String[] labels = {Ui.tr("Versão instalada", "Installed version"),
                     release != null && Updater.newer(release.tag, Updater.currentVersion(getContext()))
-                            ? Ui.tr("Atualizar agora", "Update now") : Ui.tr("Procurar atualização", "Check for updates")};
-            String[] values = {Updater.currentVersion(getContext()), updateStatus};
-            for (int i = 0; i < 2; i++) {
+                            ? Ui.tr("Atualizar agora", "Update now") : Ui.tr("Procurar atualização", "Check for updates"),
+                    Ui.tr("Enviar diagnóstico", "Send diagnostics")};
+            String[] values = {Updater.currentVersion(getContext()), updateStatus, diagStatus};
+            for (int i = 0; i < updateRows(); i++) {
                 float y = (LIST_TOP + 20 + i * (ROW_H + ROW_GAP)) * k;
                 rowRect.set(LIST_X * k, y, LIST_R * k, y + ROW_H * k);
                 float f = drawRowBackground(c, i);
                 rowLabel.setColor(blend(fg(0xF2FFFFFF), INK, f));
                 float base = rowRect.centerY() + Ui.halfCap(rowLabel);
                 c.drawText(labels[i], rowRect.left + 30 * k, base, rowLabel);
-                if (i == 1) {
+                if (i >= 1) {
                     valueAndChevron(c, values[i], base, f);
                 } else {
                     rowValue.setColor(blend(fg(0x8CFFFFFF), 0x8C1C1C1E, f));
@@ -723,7 +729,33 @@ public class SettingsActivity extends Activity {
                             "From the GitHub releases (" + Config.UPDATE_REPO + "). Android asks you to confirm the install.")
                     : Ui.tr("Atualizações desligadas neste APK.", "Updates are off in this APK.");
             c.drawText(TextUtils.ellipsize(note, new TextPaint(hint), (LIST_R - LIST_X - 30) * k, TextUtils.TruncateAt.END).toString(),
-                    LIST_X * k + 30 * k, (LIST_TOP + 20 + 2 * (ROW_H + ROW_GAP) + 40) * k, hint);
+                    LIST_X * k + 30 * k, (LIST_TOP + 20 + updateRows() * (ROW_H + ROW_GAP) + 40) * k, hint);
+        }
+
+        private String diagStatus = "";
+        private boolean diagBusy;
+
+        /** Sends the TV's screensaver/sound state and the log to the developer's ntfy topic (see Diagnostics). */
+        private void sendDiagnostics() {
+            if (diagBusy) return;
+            diagBusy = true;
+            diagStatus = Ui.tr("Enviando…", "Sending…");
+            final Context c = getContext().getApplicationContext();
+            new Thread(() -> {
+                String status;
+                try {
+                    Diagnostics.send(c);
+                    status = Ui.tr("Enviado", "Sent");
+                } catch (java.io.IOException | RuntimeException e) {
+                    status = Ui.tr("Não deu para enviar: ", "Couldn't send: ") + e.getMessage();
+                }
+                final String text = status;
+                handler.post(() -> {
+                    diagStatus = text;
+                    diagBusy = false;
+                    invalidate();
+                });
+            }).start();
         }
 
         private String weatherName() {
@@ -1174,6 +1206,7 @@ public class SettingsActivity extends Activity {
                 focus = 0;
             } else if (screen == UPDATE) {
                 if (focus == 1) installUpdate();
+                else if (focus == 2) sendDiagnostics();
                 invalidate();
                 return;
             } else if (screen == WEATHER) {
