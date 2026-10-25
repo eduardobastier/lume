@@ -70,7 +70,9 @@ final class HomeMode {
         "com.tcl.useragreement", "com.tcl.factory.view", "com.tcl.guard", "com.tcl.t_solo",
         "com.google.android.gms", "com.google.android.gsf", "com.android.vending", "com.google.android.apps.mediashell",
         "com.google.android.tv.remote.service", "com.google.android.inputmethod.latin", "com.google.android.webview",
-        "com.android.tv.settings", "com.android.systemui", "android", PKG));
+        "com.android.tv.settings", "com.android.systemui", "android", PKG,
+        // Fire TV: Amazon's home screen also hosts parts of the system (Fire OS won't run without it).
+        HomeButton.AMAZON_HOME, "com.amazon.tv.settings.v2", "com.amazon.tv.settings"));
 
     /** One switch at a time (jobs can overlap: a boot check and a button press). */
     private static final Object RUN = new Object();
@@ -127,8 +129,15 @@ final class HomeMode {
                 measureMemory(c, adb, ORIGINAL);
             }
             busy(c, Ui.tr("Trocando o Início e a tela de descanso…", "Switching the home screen and screensaver…"));
-            check(adb.shell("cmd package set-home-activity " + HOME_ACTIVITY), "Success",
-                    Ui.tr("o Android não aceitou o novo Início", "Android didn't accept the new home screen"));
+            boolean fire = fireTv(adb);
+            if (fire) {
+                // Fire OS ignores the home setting: the accessibility service brings ours back instead.
+                adb.shell("cmd package set-home-activity " + HOME_ACTIVITY);
+                ensureHomeButton(adb);
+            } else {
+                check(adb.shell("cmd package set-home-activity " + HOME_ACTIVITY), "Success",
+                        Ui.tr("o Android não aceitou o novo Início", "Android didn't accept the new home screen"));
+            }
             ensureDream(c, adb);
             List<String> targets = targets(home, dream);
             Set<String> disabled = new HashSet<>(stringList(state(c), "disabled"));
@@ -184,6 +193,7 @@ final class HomeMode {
             busy(c, Ui.tr("Devolvendo o Início original…", "Restoring the original home screen…"));
             boolean homeOk = restoreHome(adb, home);
             adb.shell("settings delete secure screensaver_components");
+            removeHomeButton(adb);
             s = state(c);
             restoreSetting(adb, "secure screensaver_enabled", s, "originalDreamEnabled");
             restoreSetting(adb, "system screen_off_timeout", s, "originalScreenTimeout");
@@ -287,6 +297,7 @@ final class HomeMode {
                     // Android 12 can't say who holds HOME: set it again quietly instead of reporting a fix.
                     if (!holders.contains("Unknown command")) fixed.add(Ui.tr("o Início", "the home screen"));
                 }
+                if (fireTv(adb) && ensureHomeButton(adb)) fixed.add(Ui.tr("o botão Home", "the Home button"));
                 if (ensureDream(app, adb)) fixed.add(Ui.tr("a tela de descanso", "the screensaver"));
                 JSONObject latest = state(app);
                 latest.put("disabled", new JSONArray(sorted(disabled)));
@@ -338,6 +349,35 @@ final class HomeMode {
         }
         save(c, s);
         return true;
+    }
+
+    /** Fire TV (Fire OS), told apart by Amazon's home screen. */
+    private static boolean fireTv(Adb adb) throws IOException {
+        return adb.shell("pm path " + HomeButton.AMAZON_HOME).contains("package:");
+    }
+
+    /** Turns on HomeButton (Fire TV), keeping any other accessibility services that are on. True if it was off. */
+    private static boolean ensureHomeButton(Adb adb) throws IOException {
+        String list = adb.shell("settings get secure enabled_accessibility_services").trim();
+        if (list.equals("null")) list = "";
+        boolean on = Arrays.asList(list.split(":")).contains(HomeButton.COMPONENT);
+        if (!on) adb.shell("settings put secure enabled_accessibility_services "
+                + (list.isEmpty() ? "" : list + ":") + HomeButton.COMPONENT);
+        if (!adb.shell("settings get secure accessibility_enabled").trim().equals("1")) {
+            adb.shell("settings put secure accessibility_enabled 1");
+            on = false;
+        }
+        return !on;
+    }
+
+    /** Turns HomeButton off again, leaving the other accessibility services as they were. */
+    private static void removeHomeButton(Adb adb) throws IOException {
+        String list = adb.shell("settings get secure enabled_accessibility_services").trim();
+        if (!list.contains(HomeButton.COMPONENT)) return;
+        List<String> kept = new ArrayList<>();
+        for (String one : list.split(":")) if (!one.isEmpty() && !one.equals(HomeButton.COMPONENT)) kept.add(one);
+        if (kept.isEmpty()) adb.shell("settings delete secure enabled_accessibility_services");
+        else adb.shell("settings put secure enabled_accessibility_services " + String.join(":", kept));
     }
 
     /** Puts back a setting ensureDream changed ("namespace key"; "null" = it wasn't set) and forgets the record. */

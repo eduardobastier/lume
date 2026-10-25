@@ -1,4 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">Free My TV</string>
+    <string name="home_button_description">Fire TV: makes the Home button open Free My TV, which Fire OS does not allow otherwise. It only notices when the Amazon home screen appears and reads nothing on the screen.</string>
 </resources>

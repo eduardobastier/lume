@@ -103,6 +103,19 @@
             </intent-filter>
         </service>
 
+        <!-- Fire TV only: Fire OS ignores a new home screen, so this brings ours back when Amazon's shows up.
+             Turned on and off by the mode switch, through the TV's ADB. -->
+        <service
+            android:name=".HomeButton"
+            android:exported="true"
+            android:label="Free My TV"
+            android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE">
+            <intent-filter>
+                <action android:name="android.accessibilityservice.AccessibilityService" />
+            </intent-filter>
+            <meta-data android:name="android.accessibilityservice" android:resource="@xml/home_button" />
+        </service>
+
         <!-- The switches, as background jobs in the main process. -->
         <service
             android:name=".ModeJob"
