@@ -81,6 +81,9 @@ public class HomeButton extends AccessibilityService {
     @Override public void onAccessibilityEvent(AccessibilityEvent e) {
         if (e.getEventType() != AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) return;
         if (e.getPackageName() == null || !amazonHome(e.getPackageName().toString())) return;
+        // Amazon's launcher also hosts Fire OS's settings (MainSettingsActivity...): only its home screen counts.
+        CharSequence cls = e.getClassName();
+        if (cls == null || !cls.toString().contains("HomeActivity")) return;
         AppLog.w("home button: Amazon's home screen showed up (" + e.getClassName() + "), free=" + free());
         if (free()) openHome();
     }
