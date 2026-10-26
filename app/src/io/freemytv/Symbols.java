@@ -78,43 +78,53 @@ final class Symbols {
     }
 
     private static final Paint LUME = new Paint(Paint.ANTI_ALIAS_FLAG);
-    private static final android.graphics.Path LUME_PATH = new android.graphics.Path();
+    private static final android.graphics.Path LUME_PATH = new android.graphics.Path(), LUME_CUT = new android.graphics.Path();
 
     /**
-     * The Lume mark (a TV with a house on it), `width` wide and centered on (cx, cy): the screen's outline, the house
-     * with its door cut out, and the stand. Same proportions as the icon and the banner.
+     * The Lume mark, drawn as shapes so it stays sharp at any size: exactly tools/make_art.py's glyph() (a rounded TV
+     * with a little house and its door on the screen), `width` wide (the glyph's bounding box) and centered on (cx, cy).
      */
     private static void lume(Canvas canvas, float cx, float cy, float width, int color) {
         synchronized (LUME) {
-            float s = width / 0.92f;
-            float x = cx - s / 2, top = cy - s * 0.42f - s * 0.08f;     // unit box: x 0..1, y 0..1 from the top
+            float s = width / 0.62f, h = 0.585f * s;
+            float ox = cx - width / 2 - 0.19f * s, oy = cy - h / 2 - 0.23f * s;   // the glyph's s × s box
             LUME.setColor(color);
+            // Screen: the outline grows inward from the box (as Pillow draws it).
+            float lw = 0.055f * s;
             LUME.setStyle(Paint.Style.STROKE);
-            float lw = 0.075f * s;
             LUME.setStrokeWidth(lw);
-            RECT.set(x + 0.04f * s + lw / 2, top + 0.08f * s + lw / 2, x + 0.96f * s - lw / 2, top + 0.70f * s - lw / 2);
-            canvas.drawRoundRect(RECT, 0.13f * s - lw / 2, 0.13f * s - lw / 2, LUME);
+            RECT.set(ox + 0.19f * s + lw / 2, oy + 0.23f * s + lw / 2, ox + 0.81f * s - lw / 2, oy + 0.67f * s - lw / 2);
+            canvas.drawRoundRect(RECT, 0.12f * s - lw / 2, 0.12f * s - lw / 2, LUME);
+            // Stand.
             LUME.setStyle(Paint.Style.FILL);
-            RECT.set(x + 0.34f * s, top + 0.845f * s, x + 0.66f * s, top + 0.92f * s);
-            canvas.drawRoundRect(RECT, 0.0375f * s, 0.0375f * s, LUME);
-            float hx = x + 0.5f * s, base = top + 0.55f * s, eave = top + 0.365f * s, roof = top + 0.20f * s;
+            RECT.set(ox + 0.4f * s, oy + 0.76f * s, ox + 0.6f * s, oy + 0.815f * s);
+            canvas.drawRoundRect(RECT, 0.0275f * s, 0.0275f * s, LUME);
+            // House: roof and walls (rounded at the bottom), the roof's edge softened, the door cut out.
+            float hx = ox + 0.5f * s, top = oy + 0.335f * s, half = 0.115f * s, eave = oy + 0.445f * s, bottom = oy + 0.575f * s, r = 0.025f * s;
             LUME_PATH.rewind();
-            LUME_PATH.setFillType(android.graphics.Path.FillType.EVEN_ODD);
-            LUME_PATH.moveTo(hx, roof);
-            LUME_PATH.lineTo(hx + 0.15f * s, eave);
-            LUME_PATH.lineTo(hx + 0.105f * s, eave);
-            LUME_PATH.lineTo(hx + 0.105f * s, base);
-            LUME_PATH.lineTo(hx + 0.032f * s, base);
-            LUME_PATH.lineTo(hx + 0.032f * s, base - 0.09f * s);
-            LUME_PATH.lineTo(hx - 0.032f * s, base - 0.09f * s);
-            LUME_PATH.lineTo(hx - 0.032f * s, base);
-            LUME_PATH.lineTo(hx - 0.105f * s, base);
-            LUME_PATH.lineTo(hx - 0.105f * s, eave);
-            LUME_PATH.lineTo(hx - 0.15f * s, eave);
+            LUME_PATH.moveTo(hx - half, eave);
+            LUME_PATH.lineTo(hx, top);
+            LUME_PATH.lineTo(hx + half, eave);
+            LUME_PATH.lineTo(hx + half, bottom - r);
+            LUME_PATH.lineTo(hx - half, bottom - r);
             LUME_PATH.close();
-            LUME.setStrokeJoin(Paint.Join.ROUND);
-            LUME.setStyle(Paint.Style.FILL_AND_STROKE);
+            LUME_CUT.rewind();
+            RECT.set(hx - half, eave, hx + half, bottom);
+            LUME_CUT.addRoundRect(RECT, r, r, android.graphics.Path.Direction.CW);
+            LUME_PATH.op(LUME_CUT, android.graphics.Path.Op.UNION);
+            LUME_CUT.rewind();
+            RECT.set(hx - 0.026f * s, oy + 0.49f * s, hx + 0.026f * s, bottom + 0.01f * s);
+            LUME_CUT.addRoundRect(RECT, 0.012f * s, 0.012f * s, android.graphics.Path.Direction.CW);
+            LUME_PATH.op(LUME_CUT, android.graphics.Path.Op.DIFFERENCE);
+            canvas.drawPath(LUME_PATH, LUME);
+            LUME.setStyle(Paint.Style.STROKE);
             LUME.setStrokeWidth(0.03f * s);
+            LUME.setStrokeJoin(Paint.Join.ROUND);
+            LUME.setStrokeCap(Paint.Cap.ROUND);
+            LUME_PATH.rewind();
+            LUME_PATH.moveTo(hx - half, eave);
+            LUME_PATH.lineTo(hx, top);
+            LUME_PATH.lineTo(hx + half, eave);
             canvas.drawPath(LUME_PATH, LUME);
         }
     }
