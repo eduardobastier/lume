@@ -234,7 +234,7 @@ public class SettingsActivity extends Activity {
         private static final int[] SAVER_MINUTES = {1, 2, 5, 10, 15, 30, 60};
         /** The popup over the list: none, the theme, the genres (several at once) or what OK on a card opens. */
         private static final int NO_POPUP = 0, THEME_POPUP = 1, GENRE_POPUP = 2, ACTION_POPUP = 3, LIVE_POPUP = 4, SAVER_POPUP = 5,
-                YES_NO_POPUP = 6, PLACE_POPUP = 7, WP_MODE_POPUP = 8, WP_PICK_POPUP = 9, WP_SOURCE_POPUP = 10, WP_ROTATE_POPUP = 11, BG_POPUP = 12, WX_POS_POPUP = 13;
+                YES_NO_POPUP = 6, PLACE_POPUP = 7, WP_MODE_POPUP = 8, WP_PICK_POPUP = 9, WP_SOURCE_POPUP = 10, WP_ROTATE_POPUP = 11, BG_POPUP = 12, WX_POS_POPUP = 13, DOCK_POPUP = 14;
         /** The on/off choice the Yes/No popup is for: its Prefs key and title. */
         private String yesNoKey = "", yesNoTitle = "";
         /** Live TV choices: [value, name], built when the popup opens (the TV's inputs and installed apps). */
@@ -423,7 +423,7 @@ public class SettingsActivity extends Activity {
 
         private int rowCount() {
             return screen == MAIN ? MAIN_ROWS : screen == RECS ? 5 : screen == THEME ? 3 : screen == WEATHER ? 4 : screen == WALL ? 4
-                    : screen == UPDATE ? updateRows() : screen == HOMESCR ? 6 : screen == SAVER ? 3 : 2;
+                    : screen == UPDATE ? updateRows() : screen == HOMESCR ? 7 : screen == SAVER ? 3 : 2;
         }
 
         @Override protected void onDraw(Canvas c) {
@@ -492,7 +492,7 @@ public class SettingsActivity extends Activity {
 
         /** Short choices open as their own page (like tvOS), in place of the list; long grids stay popups. */
         private boolean choicePage() {
-            return popup != NO_POPUP && popup != GENRE_POPUP && popup != LIVE_POPUP && popup != WP_PICK_POPUP
+            return popup != NO_POPUP && popup != GENRE_POPUP && popup != LIVE_POPUP && popup != DOCK_POPUP && popup != WP_PICK_POPUP
                     && popup != WP_ROTATE_POPUP;
         }
 
@@ -548,8 +548,8 @@ public class SettingsActivity extends Activity {
 
         private static final String[] MAIN_ICONS = {"home", "tv", "bedtime", "sync"};
         private static final int[] MAIN_COLORS = {0xFF5E5CE6, 0xFF0A84FF, 0xFFBF5AF2, 0xFF30D158};
-        private static final String[] HOME_ICONS = {"clear_night", "sparkles", "apps", "cloud", "speaker", "live_tv"};
-        private static final int[] HOME_COLORS = {0xFF636366, 0xFFFF9F0A, 0xFF0A84FF, 0xFF64D2FF, 0xFFFF375F, 0xFFFF453A};
+        private static final String[] HOME_ICONS = {"clear_night", "sparkles", "apps", "tv", "cloud", "speaker", "live_tv"};
+        private static final int[] HOME_COLORS = {0xFF636366, 0xFFFF9F0A, 0xFF0A84FF, 0xFF30D158, 0xFF64D2FF, 0xFFFF375F, 0xFFFF453A};
 
         private void drawMain(Canvas c, float seconds) {
             boolean working = busy();
@@ -630,7 +630,7 @@ public class SettingsActivity extends Activity {
 
         private int[] sectionStarts() {
             if (screen == MAIN) return new int[] {0, 3};
-            if (screen == HOMESCR) return new int[] {0, 3};
+            if (screen == HOMESCR) return new int[] {0, 4};
             return new int[] {0};
         }
 
@@ -870,6 +870,7 @@ public class SettingsActivity extends Activity {
                     {Prefs.recsOn(getContext()) ? Ui.tr("Recomendações", "Recommendations") : Ui.tr("Papel de parede", "Wallpaper"),
                             Prefs.recsOn(getContext()) ? Ui.tr("Chave do TMDB, categorias e o que o OK no card abre.", "TMDB key, genres and what OK on a card opens.")
                                     : Ui.tr("A fonte das imagens e qual aparece em cada modo.", "Where the images come from and which shows in each mode.")},
+                    {Ui.tr("Apps da barra", "Shelf apps"), Ui.tr("Marque os apps que ficam na barra. Para mudar a ordem, segure OK num app da barra.", "Tick the apps on the shelf. To reorder, hold OK on a shelf app.")},
                     {Ui.tr("Previsão do tempo", "Weather"), Ui.tr("Cidade e onde o clima aparece no topo.", "City and where the weather shows at the top.")},
                     {Ui.tr("Sons ao navegar", "Navigation sounds"), Ui.tr("Os cliques suaves ao mover o foco.", "The soft clicks when moving the focus.")},
                     {Ui.tr("TV ao Vivo", "Live TV"), Ui.tr("O app do atalho de TV ao Vivo, na gaveta de baixo.", "The app of the Live TV shortcut, in the bottom drawer.")}};
@@ -1128,6 +1129,7 @@ public class SettingsActivity extends Activity {
         // MARK: - Wallpaper (recommendations off): images from GitHub, fixed or rotating, home and screensaver
 
         private static final int[] WP_MINUTES = {1, 5, 15, 30, 60, 180, 1440};
+        private List<String[]> dockApps = new ArrayList<>();
         private int wpSlot;             // which one the popups are choosing for (Prefs.WP_LIGHT, WP_DARK, WP_SAVER)
         private boolean wpSyncing;
         private String wpStatus = "";
@@ -1395,17 +1397,19 @@ public class SettingsActivity extends Activity {
             boolean recsOn = Prefs.recsOn(ctx);
             String[] labels = {Ui.tr("Tema", "Theme"), Ui.tr("Fundo", "Background"),
                     recsOn ? Ui.tr("Recomendações", "Recommendations") : Ui.tr("Papel de parede", "Wallpaper"),
+                    Ui.tr("Apps da barra", "Shelf apps"),
                     Ui.tr("Previsão do tempo", "Weather"), Ui.tr("Sons ao navegar", "Navigation sounds"), Ui.tr("TV ao Vivo", "Live TV")};
             String[] values = {themes()[HomeView.theme(ctx)], backgroundName(),
                     recsOn ? (hasKey ? Prefs.genreNames(ctx) : Ui.tr("Sem chave do TMDB", "No TMDB key")) : Wallpapers.sourceName(ctx),
+                    HomeApps.shelfPackages(ctx).size() + Ui.tr(" apps", " apps"),
                     weatherName(), Prefs.sounds(ctx) ? Ui.tr("Sim", "On") : Ui.tr("Não", "Off"), liveName()};
-            for (int i = 0; i < 6; i++) {
+            for (int i = 0; i < 7; i++) {
                 layoutRow(i);
                 float f = drawRowBackground(c, i);
                 rowLabel.setColor(blend(fg(0xF2FFFFFF), INK, f));
                 float base = rowRect.centerY() + Ui.halfCap(rowLabel);
                 c.drawText(labels[i], rowIcon(c, HOME_ICONS[i], HOME_COLORS[i]), base, rowLabel);
-                if (i == 4) rowToggle(c, Prefs.sounds(ctx));
+                if (i == 5) rowToggle(c, Prefs.sounds(ctx));
                 else valueAndChevron(c, values[i], base, f);
             }
         }
@@ -1717,6 +1721,7 @@ public class SettingsActivity extends Activity {
             if (popup == WP_ROTATE_POPUP) return Ui.tr("Imagens na troca", "Images that rotate");
             if (popup == WP_SOURCE_POPUP) return Ui.tr("Fonte das imagens", "Image source");
             if (popup == BG_POPUP) return Ui.tr("Fundo", "Background");
+            if (popup == DOCK_POPUP) return Ui.tr("Apps da barra", "Shelf apps");
             if (popup == WX_POS_POPUP) return Ui.tr("Posição no topo", "Place at the top");
             return popup == THEME_POPUP ? Ui.tr("Tema", "Theme") : popup == GENRE_POPUP ? Ui.tr("Categorias", "Genres")
                     : Ui.tr("Ao apertar OK no card", "OK on a card");
@@ -1730,6 +1735,12 @@ public class SettingsActivity extends Activity {
                     Ui.tr("Cidade escolhida", "Chosen city")};
             if (popup == WP_MODE_POPUP) return wpModeOptions();
             if (popup == WP_SOURCE_POPUP) return wpSources();
+            if (popup == DOCK_POPUP) {
+                int n = Math.min(dockApps.size(), popupPop.length);
+                String[] out = new String[n];
+                for (int i = 0; i < n; i++) out[i] = dockApps.get(i)[1];
+                return out;
+            }
             if (popup == BG_POPUP) return new String[] {Ui.tr("Recomendações", "Recommendations"), Ui.tr("Papel de parede", "Wallpaper")};
             if (popup == WX_POS_POPUP) return wxPosNames();
             if (popup == WP_PICK_POPUP || popup == WP_ROTATE_POPUP) {
@@ -1766,6 +1777,7 @@ public class SettingsActivity extends Activity {
             }
             if (popup == WP_PICK_POPUP) return Prefs.wallpaper(getContext(), wpSlot).equals("fixed:" + wpNames().get(i));
             if (popup == WP_SOURCE_POPUP) return wpSourceIndex() == i;
+            if (popup == DOCK_POPUP) return HomeApps.shelfPackages(getContext()).contains(dockApps.get(i)[0]);
             if (popup == BG_POPUP) return Prefs.recsOn(getContext()) == (i == 0);
             if (popup == WX_POS_POPUP) return Prefs.weatherRight(getContext()) == (i == 1);
             if (popup == WP_ROTATE_POPUP) return !Prefs.wallpaperSkip(getContext()).contains(wpNames().get(i));
@@ -1779,10 +1791,10 @@ public class SettingsActivity extends Activity {
                 return;
             }
             String[] options = popupOptions();
-            boolean grid = popup == GENRE_POPUP || popup == LIVE_POPUP || popup == WP_PICK_POPUP;   // long lists in two columns
-            int cols = grid ? 2 : 1, rows = (options.length + cols - 1) / cols;
-            float rowH = rows > 9 ? 58 : 70, gap = 8, colW = grid ? (popup == LIVE_POPUP ? 470 : 400) : 640, pad = 36, head = 96,
-                    foot = popup == GENRE_POPUP ? 56 : 24;
+            boolean grid = popup == GENRE_POPUP || popup == LIVE_POPUP || popup == DOCK_POPUP || popup == WP_PICK_POPUP;   // long lists in two columns
+            int cols = popup == DOCK_POPUP ? 3 : grid ? 2 : 1, rows = (options.length + cols - 1) / cols;
+            float rowH = rows > 9 ? 52 : rows > 7 ? 58 : 70, gap = 8, colW = grid ? (popup == LIVE_POPUP ? 470 : 400) : 640, pad = 36, head = 96,
+                    foot = popup == GENRE_POPUP || popup == DOCK_POPUP ? 56 : 24;
             // An explanation under the options (the Yes/No choices say what each one does).
             String note = popupNote();
             StaticLayout noteLayout = null;
@@ -1830,7 +1842,7 @@ public class SettingsActivity extends Activity {
                 noteLayout.draw(c);
                 c.restore();
             }
-            if (popup == GENRE_POPUP) {
+            if (popup == GENRE_POPUP || popup == DOCK_POPUP) {
                 Paint hint = Ui.text(Ui.regular, 22 * k, fg(0x8CFFFFFF));
                 c.drawText(Ui.tr("OK marca ou desmarca · Voltar fecha", "OK ticks or unticks · Back closes"),
                         left + pad * k + 10 * k, top + (ph - 22) * k, hint);
@@ -1952,7 +1964,7 @@ public class SettingsActivity extends Activity {
         }
 
         private boolean popupKey(KeyEvent e, boolean down) {
-            int n = popupOptions().length, cols = popup == WP_PICK_POPUP || popup == WP_ROTATE_POPUP ? WP_COLS : popup == GENRE_POPUP || popup == LIVE_POPUP ? 2 : 1;
+            int n = popupOptions().length, cols = popup == WP_PICK_POPUP || popup == WP_ROTATE_POPUP ? WP_COLS : popup == DOCK_POPUP ? 3 : popup == GENRE_POPUP || popup == LIVE_POPUP ? 2 : 1;
             switch (e.getKeyCode()) {
                 case KeyEvent.KEYCODE_DPAD_UP:
                     if (down && popupFocus - cols >= 0) {
@@ -2027,6 +2039,12 @@ public class SettingsActivity extends Activity {
                             else if (popupFocus == 1) setWallpaperSource("wallhaven:");
                             else if (popupFocus == 2) activity.askWallhaven();
                             else setWallpaperSource("github");
+                        } else if (popup == DOCK_POPUP) {
+                            String pkg = dockApps.get(popupFocus)[0];
+                            if (HomeApps.shelfPackages(c).contains(pkg)) HomeApps.removeFromDock(c, pkg);
+                            else if (!HomeApps.addToDock(c, pkg)) android.widget.Toast.makeText(c,
+                                    Ui.tr("A barra já tem o máximo de apps. Desmarque um para incluir outro.",
+                                            "The shelf is full. Untick one to add another."), android.widget.Toast.LENGTH_LONG).show();
                         } else if (popup == BG_POPUP) {
                             Prefs.set(c, "recs_on", popupFocus == 0);
                             popup = NO_POPUP;
@@ -2062,7 +2080,7 @@ public class SettingsActivity extends Activity {
         /** One level up: Home screen's submenus go back to it, the rest to the main list (on the row they came from). */
         private void goBack() {
             if (screen == THEME || screen == RECS || screen == WALL || screen == WEATHER) {
-                focus = screen == THEME ? 0 : screen == WEATHER ? 3 : 2;
+                focus = screen == THEME ? 0 : screen == WEATHER ? 4 : 2;
                 screen = HOMESCR;
             } else {
                 focus = screen == HOMESCR ? 1 : screen == SAVER ? 2 : screen == UPDATE ? 3 : 0;
@@ -2146,8 +2164,11 @@ public class SettingsActivity extends Activity {
                         Wallpapers.checkGithub(c, false, () -> handler.post(this::invalidate));
                         if (Wallpapers.names(c).isEmpty()) syncWallpapers();
                     }
-                } else if (focus == 3) open(WEATHER, 0);
-                else if (focus == 4) openYesNo("sounds", Ui.tr("Sons ao navegar", "Navigation sounds"));
+                } else if (focus == 3) {
+                    dockApps = HomeApps.launchableApps(c);
+                    openPopup(DOCK_POPUP);
+                } else if (focus == 4) open(WEATHER, 0);
+                else if (focus == 5) openYesNo("sounds", Ui.tr("Sons ao navegar", "Navigation sounds"));
                 else {
                     liveChoices = liveChoices();
                     openPopup(LIVE_POPUP);

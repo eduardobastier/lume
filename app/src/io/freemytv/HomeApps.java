@@ -200,6 +200,17 @@ final class HomeApps {
         List<String> wanted = new ArrayList<>();
         for (String[] d : SHELF) if (!removed.contains(d[2])) wanted.add(d[2]);
         for (String p : prefList(c, "added")) if (!wanted.contains(p)) wanted.add(p);
+        // The order you set by holding OK on the shelf (apps it doesn't know keep their place at the end).
+        final List<String> order = prefList(c, "order");
+        if (!order.isEmpty()) {
+            final List<String> before = new ArrayList<>(wanted);
+            List<String> sorted = new ArrayList<>(wanted);
+            java.util.Collections.sort(sorted, (a, b) -> {
+                int ia = order.indexOf(a), ib = order.indexOf(b);
+                return Integer.compare(ia < 0 ? 1000 + before.indexOf(a) : ia, ib < 0 ? 1000 + before.indexOf(b) : ib);
+            });
+            wanted = sorted;
+        }
         for (String p : wanted) {
             if (out.size() >= MAX_SHELF) break;
             if (launchIntent(pm, p) != null) out.add(p);
@@ -223,6 +234,27 @@ final class HomeApps {
         added.remove(pkg);
         if (known(pkg) != null && !removed.contains(pkg)) removed.add(pkg);
         dock(c).edit().putString("removed", String.join(",", removed)).putString("added", String.join(",", added)).commit();
+    }
+
+    /** Saves the shelf's order (its packages, left to right). */
+    static synchronized void setDockOrder(Context c, List<String> pkgs) {
+        dock(c).edit().putString("order", String.join(",", pkgs)).commit();
+    }
+
+    /** Every app that can open on the TV ({package, name}), by name, for Home screen → Apps on the shelf. */
+    static List<String[]> launchableApps(Context c) {
+        PackageManager pm = c.getPackageManager();
+        List<String[]> out = new ArrayList<>();
+        Set<String> seen = new HashSet<>();
+        for (String cat : new String[] {Intent.CATEGORY_LEANBACK_LAUNCHER, Intent.CATEGORY_LAUNCHER}) {
+            for (android.content.pm.ResolveInfo r : pm.queryIntentActivities(new Intent(Intent.ACTION_MAIN).addCategory(cat), 0)) {
+                String pkg = r.activityInfo.packageName;
+                if (pkg.equals(c.getPackageName()) || pkg.equals("com.android.tv.settings") || !seen.add(pkg)) continue;
+                out.add(new String[] {pkg, String.valueOf(r.loadLabel(pm))});
+            }
+        }
+        java.util.Collections.sort(out, (a, b) -> a[1].compareToIgnoreCase(b[1]));
+        return out;
     }
 
     static boolean dockFull(Context c) {

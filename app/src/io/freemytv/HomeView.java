@@ -1270,6 +1270,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         RectF base = tileRects[i];
         float bw = base.width(), bh = base.height(), r0 = TILE_RADIUS * k;
         float cx = base.centerX(), cy = base.centerY();
+        if (moving && i == shelfIndex) cy -= 22 * k;     // picked up: lifted above the others while it moves
         cell.set(cx - bw * s / 2, cy - bh * s / 2, cx + bw * s / 2, cy + bh * s / 2);
         float r = r0 * s;
         // Shadow at the resting icon size, enlarged by the transform (so the blur stays cached): short at rest, deep
@@ -1877,10 +1878,12 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
                 // app opens nothing.
                 if (down) {
                     if (e.getRepeatCount() == 0) okDown = true;
-                    // Held (the first key repeat): add or remove the focused app from the shelf instead of opening it.
-                    else if (okDown && e.getRepeatCount() == 1 && editDock()) okDown = false;
+                    // Held (the first key repeat): on the shelf, pick the app up to move it; in All Apps, add it.
+                    else if (okDown && e.getRepeatCount() == 1 && holdOk()) okDown = false;
                 } else {
-                    if (okDown && !e.isCanceled()) activate();
+                    if (moving) {
+                        if (okDown && !e.isCanceled()) endMove();
+                    } else if (okDown && !e.isCanceled()) activate();
                     okDown = false;
                 }
                 return true;
@@ -1890,6 +1893,8 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
             case KeyEvent.KEYCODE_BACK:
                 if (down) {
                     if (e.getRepeatCount() == 0) backDown = true;
+                } else if (moving) {
+                    if (backDown && !e.isCanceled()) endMove();
                 } else {
                     if (backDown && !e.isCanceled()) back();
                     backDown = false;
@@ -1966,7 +1971,51 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         click.move();
     }
 
+    // MARK: - Moving a shelf app (hold OK on it): ←/→ carry it along, OK or Back puts it down
+
+    private boolean moving;
+
+    private boolean holdOk() {
+        if (!sheetOpen && zone == Z_SHELF && !shelf.isEmpty() && shelf.get(shelfIndex).kind == HomeApps.APP) {
+            moving = true;
+            click.open();
+            showToast(Ui.tr("Use ← e → para mudar " + shelf.get(shelfIndex).label + " de lugar. OK ou Voltar para terminar.",
+                    "Use ← and → to move " + shelf.get(shelfIndex).label + ". OK or Back when done."));
+            tilesDirty = true;
+            return true;
+        }
+        return editDock();     // All Apps: hold adds the app to the shelf
+    }
+
+    private void moveApp(int dx) {
+        int to = shelfIndex + dx;
+        if (to < 0 || to >= shelf.size()) return;
+        List<HomeApps.Item> list = new ArrayList<>(shelf);
+        HomeApps.Item it = list.remove(shelfIndex);
+        list.add(to, it);
+        shelf = list;
+        shelfIndex = to;
+        layoutShelf();
+        retarget(false);
+        tilesDirty = true;
+        click.move();
+    }
+
+    private void endMove() {
+        moving = false;
+        click.open();
+        final List<String> order = new ArrayList<>();
+        for (HomeApps.Item it : shelf) if (it.pkg != null) order.add(it.pkg);
+        final Context c = getContext().getApplicationContext();
+        LOADER.execute(() -> HomeApps.setDockOrder(c, order));
+        tilesDirty = true;
+    }
+
     private void move(int dx, int dy) {
+        if (moving) {
+            if (dx != 0) moveApp(dx);
+            return;
+        }
         closeSynopsis();
         moveFocus(dx, dy);
         if (!sheetOpen && zone == Z_CARDS) openSynopsis(cardIndex);
