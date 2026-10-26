@@ -129,7 +129,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
     private List<HomeApps.Item> shelf = new ArrayList<>();
     private Spring[] tileFocus = new Spring[0];
     private RectF[] tileRects = new RectF[0];
-    private final Map<String, Bitmap> crispLogos = new HashMap<>();   // logos already sized for the focused tile
+    private final Map<String, Bitmap> crispLogos = new HashMap<>();   // logos already sized for the resting and the focused tile
     /** Each app's tile like its Apple TV icon: brand colors (top, bottom) and logo (0 = as is, 1 = white, 2 = dark). */
     private static final Map<String, int[]> TILE_STYLE = new HashMap<>();
     static {
@@ -1333,13 +1333,15 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
 
     /**
      * Logo at its "optical" size (all with the same amount of ink, plus each one's own adjustment, never past 80% × 62%
-     * of the tile), centered and already filtered down to the focused tile size: when focused it is drawn pixel for
-     * pixel, without resampling.
+     * of the tile), centered and already filtered down twice: to the resting tile size and to the focused one. At rest
+     * and when focused it is drawn pixel for pixel, without resampling (shrinking the focused one on the fly blurred
+     * every resting logo); only the growing in between is scaled.
      */
     private void drawLogo(Canvas c, HomeApps.Item it, RectF box, float s, int mode) {
-        Bitmap logo = crispLogo(it, mode == 2 && it.logoDark != null);
+        boolean focused = s > 1 + FOCUS_GROW * 0.5f;
+        Bitmap logo = crispLogo(it, mode == 2 && it.logoDark != null, focused);
         if (logo == null) return;
-        float scale = s / (1 + FOCUS_GROW);
+        float scale = focused ? s / (1 + FOCUS_GROW) : s;
         float dw = logo.getWidth() * scale, dh = logo.getHeight() * scale;
         float left = box.centerX() - dw / 2, top = box.centerY() - dh / 2;
         if (scale > 0.998f) {
@@ -1352,13 +1354,14 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         bitmapPaint.setColorFilter(null);
     }
 
-    private Bitmap crispLogo(HomeApps.Item it, boolean dark) {
+    private Bitmap crispLogo(HomeApps.Item it, boolean dark, boolean focused) {
         Bitmap src = dark ? it.logoDark : it.logo;
         if (tileRects.length == 0) return src;
-        String key = it.key + "@" + System.identityHashCode(src) + "@" + Math.round(tileRects[0].width());
+        float grow = focused ? 1 + FOCUS_GROW : 1;
+        String key = it.key + "@" + System.identityHashCode(src) + "@" + Math.round(tileRects[0].width()) + (focused ? "f" : "r");
         Bitmap cached = crispLogos.get(key);
         if (cached != null) return cached;
-        float bw = tileRects[0].width() * (1 + FOCUS_GROW), bh = tileRects[0].height() * (1 + FOCUS_GROW);
+        float bw = tileRects[0].width() * grow, bh = tileRects[0].height() * grow;
         float lw = src.getWidth(), lh = src.getHeight();
         float scale = (float) Math.sqrt(bw * bh * 0.085f / (lw * lh * Math.max(0.08f, it.logoInk))) * it.logoScale;
         scale = Math.min(scale, Math.min(bw * 0.76f / lw, bh * 0.58f / lh));
