@@ -96,13 +96,13 @@ final class Prefs {
     }
 
     /**
-     * Where the wallpapers come from: "bing" (Bing's images of the day), "wallhaven:<search>" (Wallhaven's most popular,
-     * optionally a search) or "github" (the repository in config.properties).
+     * Where the wallpapers come from: "wallhaven:<search>" (the default: Wallhaven's most popular, or a search),
+     * "bing" (Bing's images of the day) or "github" (the repository in config.properties).
      */
     static String wallpaperSource(Context c) {
-        String s = ui(c).getString("wp_source", "bing");
+        String s = ui(c).getString("wp_source", "wallhaven:");
         // The GitHub folder only counts once it's been seen with images (until then it isn't offered either).
-        return s.equals("github") && !Wallpapers.githubHasImages(c) ? "bing" : s;
+        return s.equals("github") && !Wallpapers.githubHasImages(c) ? "wallhaven:" : s;
     }
 
     static void setWallpaperSource(Context c, String value) {
