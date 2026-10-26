@@ -697,6 +697,9 @@ public class SettingsActivity extends Activity {
 
         // The photo behind (the home screen's: a recommendation or the wallpaper), heavily blurred, loaded once.
         private android.graphics.Bitmap blurBg, homeThumb;
+        private android.graphics.Bitmap[] miniCards = new android.graphics.Bitmap[3];
+        private String[] miniTitles = new String[3];
+        private List<HomeApps.Item> miniShelf = new ArrayList<>();
         private boolean blurLoading;
 
         private void loadBlurBg() {
@@ -729,10 +732,31 @@ public class SettingsActivity extends Activity {
                             b.recycle();
                         }
                     }
+                    // The live home screen for the preview: this hour's 3 cards (photo + title) and the shelf's apps.
+                    List<Recs.Pick> cards = Recs.get(ctx).now();
+                    android.graphics.Bitmap[] cardPics = new android.graphics.Bitmap[3];
+                    String[] cardTitles = new String[3];
+                    for (int i = 0; i < 3 && i < cards.size(); i++) {
+                        Recs.Pick cp = cards.get(i);
+                        cardTitles[i] = cp.title;
+                        java.io.File cf = Recs.get(ctx).readyImage(cp);
+                        if (i > 0 && cp.poster != null) {
+                            java.io.File pf = new java.io.File(new java.io.File(ctx.getCacheDir(), "posters"), cp.poster.replaceAll("[^A-Za-z0-9._-]", ""));
+                            if (pf.exists()) cf = pf;
+                        }
+                        if (cf == null) continue;
+                        android.graphics.BitmapFactory.Options co = new android.graphics.BitmapFactory.Options();
+                        co.inSampleSize = 4;
+                        cardPics[i] = android.graphics.BitmapFactory.decodeFile(cf.getPath(), co);
+                    }
+                    List<HomeApps.Item> shelf = HomeApps.shelf(ctx, false);
                     final android.graphics.Bitmap done = small, doneThumb = thumb;
                     handler.post(() -> {
                         blurBg = done;
                         homeThumb = doneThumb;
+                        miniCards = cardPics;
+                        miniTitles = cardTitles;
+                        miniShelf = shelf;
                         invalidate();
                     });
                 } catch (RuntimeException | OutOfMemoryError e) {
@@ -809,29 +833,112 @@ public class SettingsActivity extends Activity {
             int glass = dark ? 0x40FFFFFF : 0xB3FFFFFF, ink = dark ? 0xF2FFFFFF : 0xFF1D1D1F;
             p.setColor(glass);
             // Top: the weather (middle, or right after the clock), the clock, and the two buttons.
+            // Top, live: the weather (icon + temperature + sky), the clock, the network and Settings buttons.
+            Paint bp = new Paint(Paint.ANTI_ALIAS_FLAG | Paint.FILTER_BITMAP_FLAG);
+            HomeData.Weather wx = HomeData.get(ctx).weather;
+            boolean hasWx = showWx && !Double.isNaN(wx.temp);
+            Paint pill = Ui.text(Ui.semibold, 30 * u, ink);
+            String clock = Ui.clock(System.currentTimeMillis());
+            float clockW = pill.measureText(clock) + 60 * u;
             float clockRight = 1650;
-            if (showWx) {
-                float wl = wxRight ? 1270 : 760, wr = wxRight ? 1650 : 1160;
-                c.drawRoundRect(new RectF(frame.left + wl * u, frame.top + 70 * u, frame.left + wr * u, frame.top + 136 * u), 33 * u, 33 * u, p);
-                if (wxRight) clockRight = 1250;
+            if (hasWx) {
+                String wtxt = HomeData.degrees(wx.temp) + "  " + HomeData.condition(wx.code, wx.isDay);
+                String sym = Symbols.weather(wx.code, wx.isDay);
+                float sw = Symbols.width(ctx, sym, 32 * u), ww = sw + 14 * u + pill.measureText(wtxt) + 60 * u;
+                float wr = wxRight ? 1650 * u : 960 * u + ww / 2, wl = wr - ww;
+                c.drawRoundRect(new RectF(frame.left + wl, frame.top + 70 * u, frame.left + wr, frame.top + 136 * u), 33 * u, 33 * u, p);
+                float tx = frame.left + wl + 30 * u, base = frame.top + 103 * u + Ui.halfCap(pill);
+                Symbols.draw(ctx, c, sym, tx + sw / 2, frame.top + 103 * u, 32 * u, ink);
+                c.drawText(wtxt, tx + sw + 14 * u, base, pill);
+                p.setColor(glass);
+                if (wxRight) clockRight = (wl - 20 * u) / u;
             }
-            c.drawRoundRect(new RectF(frame.left + (clockRight - 150) * u, frame.top + 70 * u, frame.left + clockRight * u, frame.top + 136 * u), 33 * u, 33 * u, p);
+            RectF cr = new RectF(frame.left + clockRight * u - clockW, frame.top + 70 * u, frame.left + clockRight * u, frame.top + 136 * u);
+            c.drawRoundRect(cr, 33 * u, 33 * u, p);
+            pill.setTextAlign(Paint.Align.CENTER);
+            c.drawText(clock, cr.centerX(), cr.centerY() + Ui.halfCap(pill), pill);
             c.drawCircle(frame.left + 1716 * u, frame.top + 103 * u, 34 * u, p);
             c.drawCircle(frame.left + 1806 * u, frame.top + 103 * u, 34 * u, p);
+            Symbols.draw(ctx, c, "settings", frame.left + 1806 * u, frame.top + 103 * u, 26 * u, ink);
+            Paint wifi = new Paint(Paint.ANTI_ALIAS_FLAG);
+            wifi.setStyle(Paint.Style.STROKE);
+            wifi.setStrokeCap(Paint.Cap.ROUND);
+            wifi.setStrokeWidth(4 * u);
+            wifi.setColor(ink);
+            float wcx = frame.left + 1716 * u, wcy = frame.top + 113 * u;
+            boolean cable = false;
+            try {
+                android.net.ConnectivityManager cm = (android.net.ConnectivityManager) ctx.getSystemService(Context.CONNECTIVITY_SERVICE);
+                android.net.NetworkCapabilities nc = cm.getNetworkCapabilities(cm.getActiveNetwork());
+                cable = nc != null && nc.hasTransport(android.net.NetworkCapabilities.TRANSPORT_ETHERNET);
+            } catch (RuntimeException ignored) {}
+            if (cable) {     // the Ethernet port, like the home screen's button
+                wifi.setStyle(Paint.Style.FILL);
+                c.drawRoundRect(new RectF(wcx - 11 * u, wcy - 19 * u, wcx + 11 * u, wcy - 3 * u), 2 * u, 2 * u, wifi);
+                c.drawRect(wcx - 5 * u, wcy - 4 * u, wcx + 5 * u, wcy + 1 * u, wifi);
+            } else {
+                for (float rr : new float[] {7 * u, 13 * u, 19 * u}) {
+                    c.drawArc(new RectF(wcx - rr, wcy - rr, wcx + rr, wcy + rr), 225, 90, false, wifi);
+                }
+            }
             if (recsOn) {
                 Paint t = Ui.text(Ui.semibold, 70 * u, ink);
                 c.drawText(Ui.tr("Para você", "For You"), frame.left + 80 * u, frame.top + 130 * u, t);
-                p.setColor(dark ? 0x66FFFFFF : 0x99FFFFFF);
-                c.drawRoundRect(new RectF(frame.left + 80 * u, frame.top + 262 * u, frame.left + 1120 * u, frame.top + 704 * u), 18 * u, 18 * u, p);
-                c.drawRoundRect(new RectF(frame.left + 1160 * u, frame.top + 262 * u, frame.left + 1480 * u, frame.top + 704 * u), 18 * u, 18 * u, p);
-                c.drawRoundRect(new RectF(frame.left + 1520 * u, frame.top + 262 * u, frame.left + 1840 * u, frame.top + 704 * u), 18 * u, 18 * u, p);
+                Paint tab = Ui.text(Ui.semibold, 30 * u, ink);
+                c.drawText(Ui.tr("Explorar", "Explore"), frame.left + 80 * u, frame.top + 205 * u, tab);
+                tab.setColor(dark ? 0x99FFFFFF : 0x991D1D1F);
+                c.drawText(Ui.tr("Filmes", "Movies"), frame.left + 250 * u, frame.top + 205 * u, tab);
+                c.drawText(Ui.tr("Séries", "Shows"), frame.left + 390 * u, frame.top + 205 * u, tab);
+                float[][] boxes = {{80, 1120}, {1160, 1480}, {1520, 1840}};
+                Paint cap = Ui.text(Ui.semibold, 30 * u, ink);
+                for (int i = 0; i < 3; i++) {
+                    RectF cb = new RectF(frame.left + boxes[i][0] * u, frame.top + 262 * u, frame.left + boxes[i][1] * u, frame.top + 704 * u);
+                    c.save();
+                    android.graphics.Path cc = new android.graphics.Path();
+                    cc.addRoundRect(cb, 18 * u, 18 * u, android.graphics.Path.Direction.CW);
+                    c.clipPath(cc);
+                    android.graphics.Bitmap img = miniCards[i];
+                    if (img != null) {
+                        float sc = Math.max(cb.width() / img.getWidth(), cb.height() / img.getHeight());
+                        float iw = img.getWidth() * sc, ih = img.getHeight() * sc;
+                        c.drawBitmap(img, null, new RectF(cb.centerX() - iw / 2, cb.centerY() - ih / 2, cb.centerX() + iw / 2, cb.centerY() + ih / 2), bp);
+                    } else {
+                        p.setColor(dark ? 0x66FFFFFF : 0x99FFFFFF);
+                        c.drawRect(cb, p);
+                    }
+                    c.restore();
+                    if (miniTitles[i] != null) {
+                        String tt = TextUtils.ellipsize(miniTitles[i], new TextPaint(cap), cb.width(), TextUtils.TruncateAt.END).toString();
+                        c.drawText(tt, cb.left, cb.bottom + 44 * u, cap);
+                    }
+                }
             }
+            // The shelf, live: each app's tile (logo on its card), up to what fits.
             p.setColor(glass);
-            c.drawRoundRect(new RectF(frame.left + 310 * u, frame.top + 815 * u, frame.left + 1610 * u, frame.top + 1020 * u), 50 * u, 50 * u, p);
-            p.setColor(dark ? 0xCC111113 : 0xFFFFFFFF);
-            for (int i = 0; i < 4; i++) {
-                float x0 = frame.left + (340 + i * 318) * u;
-                c.drawRoundRect(new RectF(x0, frame.top + 855 * u, x0 + 270 * u, frame.top + 980 * u), 20 * u, 20 * u, p);
+            int apps = Math.max(1, Math.min(5, miniShelf.size()));
+            float tileW = 270, gap = 48, inner = apps * tileW + (apps - 1) * gap, pad = 30;
+            float sl = 960 - inner / 2 - pad, sr = 960 + inner / 2 + pad;
+            c.drawRoundRect(new RectF(frame.left + sl * u, frame.top + 815 * u, frame.left + sr * u, frame.top + 1020 * u), 50 * u, 50 * u, p);
+            for (int i = 0; i < apps; i++) {
+                float x0 = frame.left + (960 - inner / 2 + i * (tileW + gap)) * u;
+                RectF tb = new RectF(x0, frame.top + 855 * u, x0 + tileW * u, frame.top + 980 * u);
+                p.setColor(dark ? 0xEB17181C : 0xFFFFFFFF);
+                c.drawRoundRect(tb, 20 * u, 20 * u, p);
+                if (i >= miniShelf.size()) continue;
+                HomeApps.Item it = miniShelf.get(i);
+                android.graphics.Bitmap logo = !dark && it.logoDark != null ? it.logoDark : it.logo;
+                if (logo != null) {
+                    float sc = Math.min(tb.width() * 0.7f / logo.getWidth(), tb.height() * 0.5f / logo.getHeight());
+                    float lw = logo.getWidth() * sc, lh = logo.getHeight() * sc;
+                    c.drawBitmap(logo, null, new RectF(tb.centerX() - lw / 2, tb.centerY() - lh / 2, tb.centerX() + lw / 2, tb.centerY() + lh / 2), bp);
+                } else if (it.tile != null) {
+                    c.save();
+                    android.graphics.Path tc = new android.graphics.Path();
+                    tc.addRoundRect(tb, 20 * u, 20 * u, android.graphics.Path.Direction.CW);
+                    c.clipPath(tc);
+                    c.drawBitmap(it.tile, null, tb, bp);
+                    c.restore();
+                }
             }
             c.restore();
         }
