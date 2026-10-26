@@ -52,6 +52,10 @@ final class Symbols {
 
     /** Draws centered at (cx, cy) in the given color (lighter, translucent parts of the symbol stay lighter). */
     static void draw(Context c, Canvas canvas, String name, float cx, float cy, float pointSize, int color) {
+        if (name.equals("lume")) {     // the app's own mark: drawn as shapes, sharp at any size
+            lume(canvas, cx, cy, pointSize * 154 / PX_PER_POINT, color);
+            return;
+        }
         Bitmap b = get(c, name);
         if (b == null) return;
         synchronized (PAINT) {   // card loading (another thread) also draws symbols
@@ -71,6 +75,48 @@ final class Symbols {
         PAINT.setColorFilter(filter);
         RECT.set(cx - w / 2, cy - h / 2, cx + w / 2, cy + h / 2);
         canvas.drawBitmap(b, null, RECT, PAINT);
+    }
+
+    private static final Paint LUME = new Paint(Paint.ANTI_ALIAS_FLAG);
+    private static final android.graphics.Path LUME_PATH = new android.graphics.Path();
+
+    /**
+     * The Lume mark (a TV with a house on it), `width` wide and centered on (cx, cy): the screen's outline, the house
+     * with its door cut out, and the stand. Same proportions as the icon and the banner.
+     */
+    private static void lume(Canvas canvas, float cx, float cy, float width, int color) {
+        synchronized (LUME) {
+            float s = width / 0.92f;
+            float x = cx - s / 2, top = cy - s * 0.42f - s * 0.08f;     // unit box: x 0..1, y 0..1 from the top
+            LUME.setColor(color);
+            LUME.setStyle(Paint.Style.STROKE);
+            float lw = 0.075f * s;
+            LUME.setStrokeWidth(lw);
+            RECT.set(x + 0.04f * s + lw / 2, top + 0.08f * s + lw / 2, x + 0.96f * s - lw / 2, top + 0.70f * s - lw / 2);
+            canvas.drawRoundRect(RECT, 0.13f * s - lw / 2, 0.13f * s - lw / 2, LUME);
+            LUME.setStyle(Paint.Style.FILL);
+            RECT.set(x + 0.34f * s, top + 0.845f * s, x + 0.66f * s, top + 0.92f * s);
+            canvas.drawRoundRect(RECT, 0.0375f * s, 0.0375f * s, LUME);
+            float hx = x + 0.5f * s, base = top + 0.55f * s, eave = top + 0.365f * s, roof = top + 0.20f * s;
+            LUME_PATH.rewind();
+            LUME_PATH.setFillType(android.graphics.Path.FillType.EVEN_ODD);
+            LUME_PATH.moveTo(hx, roof);
+            LUME_PATH.lineTo(hx + 0.15f * s, eave);
+            LUME_PATH.lineTo(hx + 0.105f * s, eave);
+            LUME_PATH.lineTo(hx + 0.105f * s, base);
+            LUME_PATH.lineTo(hx + 0.032f * s, base);
+            LUME_PATH.lineTo(hx + 0.032f * s, base - 0.09f * s);
+            LUME_PATH.lineTo(hx - 0.032f * s, base - 0.09f * s);
+            LUME_PATH.lineTo(hx - 0.032f * s, base);
+            LUME_PATH.lineTo(hx - 0.105f * s, base);
+            LUME_PATH.lineTo(hx - 0.105f * s, eave);
+            LUME_PATH.lineTo(hx - 0.15f * s, eave);
+            LUME_PATH.close();
+            LUME.setStrokeJoin(Paint.Join.ROUND);
+            LUME.setStyle(Paint.Style.FILL_AND_STROKE);
+            LUME.setStrokeWidth(0.03f * s);
+            canvas.drawPath(LUME_PATH, LUME);
+        }
     }
 
     /** Weather symbol for an Open-Meteo WMO weather code. */
