@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Builds FreeMyTV.apk without Gradle: aapt2 -> javac -> d8 -> zipalign -> apksigner.
+# Builds Lume.apk without Gradle: aapt2 -> javac -> d8 -> zipalign -> apksigner.
 # Needs a JDK (17+) and the Android SDK command-line tools (build-tools 34+, platform android-34). See README.md.
 set -euo pipefail
 cd "$(dirname "$0")"
@@ -87,7 +87,7 @@ EOF
 # --- Sign with your own key (created once; updates need the same key, so keep freemytv.keystore)
 if [ ! -f freemytv.keystore ]; then
   "$KEYTOOL" -genkeypair -keystore freemytv.keystore -alias freemytv -keyalg RSA -keysize 2048 -validity 20000 \
-    -storepass freemytv -keypass freemytv -dname "CN=Free My TV" >/dev/null 2>&1
+    -storepass freemytv -keypass freemytv -dname "CN=Lume" >/dev/null 2>&1
 fi
-"$BT/apksigner" sign --ks freemytv.keystore --ks-pass pass:freemytv --key-pass pass:freemytv --out FreeMyTV.apk out/aligned.apk
-echo "Built FreeMyTV.apk ($(du -h FreeMyTV.apk | cut -f1)). Install: adb install -r FreeMyTV.apk"
+"$BT/apksigner" sign --ks freemytv.keystore --ks-pass pass:freemytv --key-pass pass:freemytv --out Lume.apk out/aligned.apk
+echo "Built Lume.apk ($(du -h Lume.apk | cut -f1)). Install: adb install -r Lume.apk"

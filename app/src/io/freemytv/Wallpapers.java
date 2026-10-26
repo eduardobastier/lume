@@ -261,7 +261,7 @@ final class Wallpapers {
         http.setConnectTimeout(10_000);
         http.setReadTimeout(30_000);
         http.setRequestProperty("Accept", "application/vnd.github+json");
-        http.setRequestProperty("User-Agent", "FreeMyTV");
+        http.setRequestProperty("User-Agent", "Lume");
         try {
             int code = http.getResponseCode();
             if (code == 404) throw new IOException("not found: " + url);

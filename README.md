@@ -2,7 +2,7 @@
 
 <img src="docs/assets/icon-512.png" width="96" alt="">
 
-# Free My TV
+# Lume
 
 **A fast, ad-free home screen for Google TV.**
 
@@ -11,7 +11,7 @@ Open source. Built with Claude Code. One button to undo.
 
 [**freemytv.io**](https://freemytv.io) · [Install](#install) · [Any TV](#any-tv) · [Make it yours](#make-it-yours)
 
-<img src=".github/preview.webp" width="880" alt="The Free My TV home screen: a glass shelf of apps, trending picks, and a drawer with the weather and crypto prices">
+<img src=".github/preview.webp" width="880" alt="The Lume home screen: a glass shelf of apps, trending picks, and a drawer with the weather and crypto prices">
 
 </div>
 
@@ -56,10 +56,10 @@ About ten minutes. You need a Google TV, Android TV or Fire TV (Android 9 or new
    git clone https://github.com/simbasjungles/free-my-tv && cd free-my-tv
    ```
 3. **Open [Claude Code](https://claude.com/claude-code) in that folder** and say:
-   > Install Free My TV on my TV at 192.168.1.50. I live in Lisbon.
+   > Install Lume on my TV at 192.168.1.50. I live in Lisbon.
 
    It installs the tools it needs, builds the app and puts it on your TV. Swap in your TV's IP and your city.
-4. **On the TV**, open *Free My TV* → *Home Screen* → *Free My TV*, and accept the debugging prompt (tick *Always allow*).
+4. **On the TV**, open *Lume* → *Home Screen* → *Lume*, and accept the debugging prompt (tick *Always allow*).
 
 ### The manual way
 
@@ -78,9 +78,9 @@ About ten minutes. You need a Google TV, Android TV or Fire TV (Android 9 or new
 4. **Install:**
    ```bash
    adb connect 192.168.1.50:5555
-   adb install -r FreeMyTV.apk
+   adb install -r Lume.apk
    ```
-5. **On the TV**, open *Free My TV* → *Home Screen* → *Free My TV*.
+5. **On the TV**, open *Lume* → *Home Screen* → *Lume*.
 
 ## Settings
 
@@ -103,13 +103,13 @@ Changed something? Run `./build.sh` and install again. Keep `freemytv.keystore`:
 
 Free, and it takes two minutes: create an account at [themoviedb.org](https://www.themoviedb.org/signup), then open [Settings → API](https://www.themoviedb.org/settings/api) and request a developer key. Paste the *API Read Access Token* (or the *API Key*) after `tmdb_key=`. It's your key: `config.properties` stays out of git.
 
-Or leave `tmdb_key` empty and type the key on the TV: *Free My TV* → *Recommendations* → *TMDB key* (the TV's keyboard; TMDB checks it before it's kept). That's the way to share one APK: each TV uses its own key.
+Or leave `tmdb_key` empty and type the key on the TV: *Lume* → *Recommendations* → *TMDB key* (the TV's keyboard; TMDB checks it before it's kept). That's the way to share one APK: each TV uses its own key.
 
 ## Going back
 
-On the TV: *Free My TV* → *Home Screen* → *Original*. The factory home screen, screensaver and every app come back exactly as they were. If the new home screen ever crashes three times in five minutes, it switches back by itself.
+On the TV: *Lume* → *Home Screen* → *Original*. The factory home screen, screensaver and every app come back exactly as they were. If the new home screen ever crashes three times in five minutes, it switches back by itself.
 
-To remove it for good, switch to *Original* first, then uninstall *Free My TV* (Settings → Apps).
+To remove it for good, switch to *Original* first, then uninstall *Lume* (Settings → Apps).
 
 ## What it changes
 
@@ -123,11 +123,11 @@ To remove it for good, switch to *Original* first, then uninstall *Free My TV* (
 
 ## Any TV
 
-Free My TV runs on Google TV and Android TV: TCL, Sony, Hisense, Philips, Xiaomi and more, plus streamers like Chromecast with Google TV, the Google TV Streamer, onn 4K and NVIDIA Shield.
+Lume runs on Google TV and Android TV: TCL, Sony, Hisense, Philips, Xiaomi and more, plus streamers like Chromecast with Google TV, the Google TV Streamer, onn 4K and NVIDIA Shield.
 
 **Samsung, LG or any other TV:** plug a Google TV streamer into HDMI and free that one. Same steps, same home screen.
 
-**A different brand or model:** ask Claude. Free My TV is made to be adapted by AI. Open the folder in Claude Code and say *"set it up for my Sony"*: it reads your TV, finds its home screen and its promo apps, updates the lists below and walks you through a test. [CLAUDE.md](CLAUDE.md) tells it how.
+**A different brand or model:** ask Claude. Lume is made to be adapted by AI. Open the folder in Claude Code and say *"set it up for my Sony"*: it reads your TV, finds its home screen and its promo apps, updates the lists below and walks you through a test. [CLAUDE.md](CLAUDE.md) tells it how.
 
 | What | Where |
 |---|---|
@@ -156,7 +156,7 @@ It's your code, and Claude Code finds its way around it. Try:
 | File | What it is |
 |---|---|
 | [`HomeView.java`](app/src/io/freemytv/HomeView.java) | The home screen |
-| [`HomeMode.java`](app/src/io/freemytv/HomeMode.java) | Switching between Free My TV and Original |
+| [`HomeMode.java`](app/src/io/freemytv/HomeMode.java) | Switching between Lume and Original |
 | [`Adb.java`](app/src/io/freemytv/Adb.java) | The TV's own ADB, from inside the TV |
 | [`Recs.java`](app/src/io/freemytv/Recs.java) | The picks (TMDB) |
 | [`HomeData.java`](app/src/io/freemytv/HomeData.java) | Weather and prices |

@@ -305,7 +305,7 @@ final class HomeData {
         HttpURLConnection c = (HttpURLConnection) new URL(url).openConnection();
         c.setConnectTimeout(6000);
         c.setReadTimeout(6000);
-        c.setRequestProperty("User-Agent", "FreeMyTV");
+        c.setRequestProperty("User-Agent", "Lume");
         try {
             if (c.getResponseCode() != 200) throw new IOException("HTTP " + c.getResponseCode());
             try (InputStream in = c.getInputStream()) {

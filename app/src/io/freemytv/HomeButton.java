@@ -13,7 +13,7 @@ import android.view.accessibility.AccessibilityEvent;
 
 /**
  * Fire TV: Fire OS ignores `set-home-activity` and Home always opens Amazon's home screen. This accessibility service
- * (the only way apps get around that), in Free My TV mode:
+ * (the only way apps get around that), in Lume mode:
  * - takes the Home key and opens ours. Letting Home through and opening ours after Amazon's showed it only 4 to 6 s
  *   later: Android holds back apps opening for 5 s after Home. (So holding Home no longer opens Fire OS's quick menu;
  *   its settings are still in our home screen's settings button.)
@@ -106,7 +106,7 @@ public class HomeButton extends AccessibilityService {
     }
 
     private void openHome() {
-        AppLog.w("home button: opening Free My TV");
+        AppLog.w("home button: opening Lume");
         try {
             // No CATEGORY_HOME: Fire OS sends home intents to Amazon's launcher whatever their target.
             startActivity(new Intent(this, HomeActivity.class)

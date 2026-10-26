@@ -27,9 +27,9 @@ import org.json.JSONArray;
 import org.json.JSONObject;
 
 /**
- * Free My TV's settings (the app's icon, "All Apps", or the gear on the home screen), in the style of Apple TV's
+ * Lume's settings (the app's icon, "All Apps", or the gear on the home screen), in the style of Apple TV's
  * settings: the big symbol and title on the left, the list on the right with the focused row in white. "Home screen"
- * opens the Free My TV / Original choice (with a check on the current one); the switch runs in the main process
+ * opens the Lume / Original choice (with a check on the current one); the switch runs in the main process
  * (HomeMode) and this screen only asks for it and follows the state file.
  */
 public class SettingsActivity extends Activity {
@@ -389,7 +389,7 @@ public class SettingsActivity extends Activity {
             icon.setShader(new android.graphics.LinearGradient(0, tmp.top, 0, tmp.bottom, 0xFF5E5CE6, 0xFF0A84FF,
                     android.graphics.Shader.TileMode.CLAMP));
             c.drawRoundRect(tmp, r, r, icon);
-            Symbols.draw(getContext(), c, "sparkles", cx, cy, size * 0.52f, 0xFFFFFFFF);
+            Symbols.draw(getContext(), c, "lume", cx, cy, size * 0.52f, 0xFFFFFFFF);
         }
 
         private String screenTitle() {
@@ -435,7 +435,7 @@ public class SettingsActivity extends Activity {
             c.drawText(screenTitle(), 960 * k, 118 * k, title);
             float cx = 500 * k;
             drawIcon(c, cx, 470 * k, 300 * k);
-            c.drawText("Free My TV", cx, 690 * k, subtitle);
+            c.drawText("Lume", cx, 690 * k, subtitle);
             c.drawText(versionName(getContext()), cx, 732 * k, version);
 
             if (screen == MAIN) drawMain(c, seconds);
@@ -453,7 +453,7 @@ public class SettingsActivity extends Activity {
         private void drawMain(Canvas c, float seconds) {
             boolean working = busy();
             String busyText = state.optString("busy");
-            String mode = freeActive() ? "Free My TV" : Ui.tr("Original", "Original");
+            String mode = freeActive() ? "Lume" : Ui.tr("Original", "Original");
             String[] labels = {Ui.tr("Início", "Home"), Ui.tr("Tela inicial", "Home screen"), Ui.tr("Tela de descanso", "Screensaver"),
                     Ui.tr("Sistema", "System")};
             String[] values = {working ? "" : mode, themes()[HomeView.theme(getContext())] + " · " + backgroundName(), saverName(),
@@ -535,7 +535,7 @@ public class SettingsActivity extends Activity {
             return f;
         }
 
-        /** Home screen choice: Free My TV or the original, with a check on the one in use. */
+        /** Home screen choice: Lume or the original, with a check on the one in use. */
         private String[] themes() {
             return new String[] {Ui.tr("Automático", "Automatic"), Ui.tr("Claro", "Light"), Ui.tr("Escuro", "Dark")};
         }
@@ -1340,7 +1340,7 @@ public class SettingsActivity extends Activity {
         }
 
         private void drawChoice(Canvas c) {
-            String[][] options = {{"Free My TV", Ui.tr("Sem anúncios, com a tela de descanso nova", "No ads, with the new screensaver")},
+            String[][] options = {{"Lume", Ui.tr("Sem anúncios, com a tela de descanso nova", "No ads, with the new screensaver")},
                     {"Original", Ui.tr("O Início de fábrica da TV", "The TV's factory home screen")}};
             int current = freeActive() ? 0 : 1;
             for (int i = 0; i < 2; i++) {
@@ -1371,9 +1371,9 @@ public class SettingsActivity extends Activity {
 
         private static String versionName(Context c) {
             try {
-                return "Free My TV " + c.getPackageManager().getPackageInfo(c.getPackageName(), 0).versionName;
+                return "Lume " + c.getPackageManager().getPackageInfo(c.getPackageName(), 0).versionName;
             } catch (android.content.pm.PackageManager.NameNotFoundException e) {
-                return "Free My TV";
+                return "Lume";
             }
         }
 

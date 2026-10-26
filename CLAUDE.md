@@ -1,7 +1,7 @@
-# Free My TV: notes for Claude
+# Lume: notes for Claude
 
 A home screen for Google TV and Android TV that replaces the stock one, plus a settings app that switches between
-Free My TV and the TV's original home screen. A plain Android app in Java, built without Gradle by `build.sh`.
+Lume and the TV's original home screen. A plain Android app in Java, built without Gradle by `build.sh`.
 The website (freemytv.io) is in `docs/`: static HTML, CSS and JS, no build step. A push to `main` that changes it
 publishes it to GitHub Pages (`.github/workflows/pages.yml`). `docs/index.html` (English) and `docs/pt/index.html`
 (Brazilian Portuguese) are the same page in two languages, so change both; visitors from Brazil land on the
@@ -25,16 +25,16 @@ before you do it, and let them do the taps on the TV.
    after `tmdb_key=` in `config.properties` themselves. Don't ask for it in the chat, never print it, never commit
    it. If they paste it in the chat anyway, put it only in `config.properties`.
    Without a key everything works except the picks and the screensaver photos.
-5. **Build:** `./build.sh` → `FreeMyTV.apk`. Keep `freemytv.keystore`: updates must be signed with the same key.
+5. **Build:** `./build.sh` → `Lume.apk`. Keep `freemytv.keystore`: updates must be signed with the same key.
 6. **Install:** `adb connect <IP>:5555`. The TV asks *Allow USB debugging?*: tell them to accept and tick *Always
-   allow*. Then `adb install -r FreeMyTV.apk`.
+   allow*. Then `adb install -r Lume.apk`.
 7. **Tell them what the switch does** before they make it: the home screen and screensaver change, a short list of
    promo apps is turned off (never uninstalled), and *Original* brings it all back. On some TVs the remote's
-   shortcut buttons belong to the stock home screen (TCL: Netflix, YouTube, Prime), so they rest while Free My TV
+   shortcut buttons belong to the stock home screen (TCL: Netflix, YouTube, Prime), so they rest while Lume
    is on.
-8. **They switch on the TV:** *Free My TV* → *Home Screen* → *Free My TV*. The app uses the TV's own ADB on
+8. **They switch on the TV:** *Lume* → *Home Screen* → *Lume*. The app uses the TV's own ADB on
    127.0.0.1 with its own key, so the TV asks once more to allow debugging. Don't switch modes from the computer.
-9. **Check:** `adb logcat -s FreeMyTV` shows what the switch did.
+9. **Check:** `adb logcat -s Lume` shows what the switch did.
 
 ## Adapting it to another TV
 
@@ -54,13 +54,13 @@ Then, in the code:
 - `HomeMode.PROTECTED`: add the brand's system pieces: picture, sound, inputs and HDMI-CEC, the tuner and live TV,
   remote and Bluetooth pairing, setup, updates, system UI. When in doubt, protect it.
 - `HomeApps.SHELF`, `LIVE_TV_APPS` and `HIDDEN`: the shelf apps, the brand's live TV app, apps to hide from All Apps.
-- Build, install, have them switch on the TV, read `adb logcat -s FreeMyTV`, then have them switch back to
+- Build, install, have them switch on the TV, read `adb logcat -s Lume`, then have them switch back to
   *Original* once and confirm everything returned.
 
 TVs that don't run Google TV or Android TV (Samsung, LG and others): the way is a Google TV streamer on HDMI
-(Chromecast with Google TV, Google TV Streamer, onn 4K, NVIDIA Shield). Set Free My TV up on the streamer.
+(Chromecast with Google TV, Google TV Streamer, onn 4K, NVIDIA Shield). Set Lume up on the streamer.
 
-**Uninstalled while in Free My TV mode?** The apps it turned off stay off. Bring them back with
+**Uninstalled while in Lume mode?** The apps it turned off stay off. Bring them back with
 `adb shell pm enable <package>` (the `DEBLOAT` list and the stock home screen), then
 `adb shell cmd package set-home-activity <stock home activity>` and
 `adb shell settings put secure screensaver_components <stock screensaver>`.
@@ -75,7 +75,7 @@ TVs that don't run Google TV or Android TV (Samsung, LG and others): the way is 
 - On-screen text is bilingual, `Ui.tr("pt", "en")`: add both. Comments in English, short, only where the why
   isn't obvious.
 - Settings come from `config.properties` through the generated `out/gen/io/freemytv/Config.java` (never edit that).
-- After any change, `./build.sh` must end with `Built FreeMyTV.apk`.
+- After any change, `./build.sh` must end with `Built Lume.apk`.
 
 ## Branches (eduardobastier/my-tv)
 

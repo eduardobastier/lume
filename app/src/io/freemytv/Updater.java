@@ -54,7 +54,7 @@ final class Updater {
         c.setConnectTimeout(8000);
         c.setReadTimeout(8000);
         c.setRequestProperty("Accept", "application/vnd.github+json");
-        c.setRequestProperty("User-Agent", "FreeMyTV");
+        c.setRequestProperty("User-Agent", "Lume");
         try {
             if (c.getResponseCode() != 200) throw new IOException("GitHub returned HTTP " + c.getResponseCode());
             JSONObject o = new JSONObject(read(c.getInputStream()));
@@ -96,7 +96,7 @@ final class Updater {
         conn.setConnectTimeout(10000);
         conn.setReadTimeout(30000);
         conn.setInstanceFollowRedirects(true);
-        conn.setRequestProperty("User-Agent", "FreeMyTV");
+        conn.setRequestProperty("User-Agent", "Lume");
         try (InputStream in = conn.getInputStream(); OutputStream out = new FileOutputStream(f)) {
             long total = r.size > 0 ? r.size : conn.getContentLengthLong(), done = 0;
             byte[] buffer = new byte[32768];

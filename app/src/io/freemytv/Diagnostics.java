@@ -26,9 +26,9 @@ final class Diagnostics {
     /** Collects and sends (on a background thread). Throws with a short reason if it couldn't be sent. */
     static void send(Context c) throws IOException {
         byte[] file = collect(c).getBytes(StandardCharsets.UTF_8);
-        String boundary = "freemytv" + System.nanoTime();
-        String name = "freemytv-" + Build.MODEL.replaceAll("[^\\w-]", "_") + "-" + System.currentTimeMillis() / 1000 + ".txt";
-        String caption = "Free My TV " + Updater.currentVersion(c) + " · " + Build.MANUFACTURER + " " + Build.MODEL
+        String boundary = "lume" + System.nanoTime();
+        String name = "lume-" + Build.MODEL.replaceAll("[^\\w-]", "_") + "-" + System.currentTimeMillis() / 1000 + ".txt";
+        String caption = "Lume " + Updater.currentVersion(c) + " · " + Build.MANUFACTURER + " " + Build.MODEL
                 + " · Android " + Build.VERSION.RELEASE;
         String head = "--" + boundary + "\r\nContent-Disposition: form-data; name=\"chat_id\"\r\n\r\n" + Config.TELEGRAM_CHAT
                 + "\r\n--" + boundary + "\r\nContent-Disposition: form-data; name=\"caption\"\r\n\r\n" + caption
@@ -59,7 +59,7 @@ final class Diagnostics {
 
     private static String collect(Context c) {
         StringBuilder b = new StringBuilder();
-        b.append("Free My TV ").append(Updater.currentVersion(c)).append('\n');
+        b.append("Lume ").append(Updater.currentVersion(c)).append('\n');
         b.append(Build.MANUFACTURER).append(' ').append(Build.MODEL).append(" (").append(Build.DEVICE).append("), Android ")
                 .append(Build.VERSION.RELEASE).append(" / API ").append(Build.VERSION.SDK_INT).append('\n');
         b.append(Build.FINGERPRINT).append("\n\n");

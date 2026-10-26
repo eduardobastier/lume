@@ -262,7 +262,7 @@ final class HomeApps {
         return shortcut(kind, key, label, symbol);
     }
 
-    /** Free My TV settings, in the corner of the home screen. */
+    /** Lume settings, in the corner of the home screen. */
     static Item settings() {
         return shortcut(SETTINGS, "settings", Ui.tr("Ajustes", "Settings"), "settings");
     }
@@ -368,7 +368,7 @@ final class HomeApps {
             items.add(it);
         }
         Collections.sort(items, (a, b) -> a.label.toLowerCase(Locale.ROOT).compareTo(b.label.toLowerCase(Locale.ROOT)));
-        items.add(special(c, SETTINGS, "freemytv-settings", "Free My TV", "sparkles"));
+        items.add(special(c, SETTINGS, "freemytv-settings", "Lume", "lume"));
         return items;
     }
 
