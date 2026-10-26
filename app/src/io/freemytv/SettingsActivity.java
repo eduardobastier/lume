@@ -455,7 +455,8 @@ public class SettingsActivity extends Activity {
             }
             float cx = 500 * k;
             String[] info = popup == NO_POPUP ? focusInfo() : null;
-            drawMiniHome(c, cx, 440 * k);
+            if (screen == SAVER) drawMiniSaver(c, cx, 440 * k);
+            else drawMiniHome(c, cx, 440 * k);
             if (info != null) {
                 Paint ht = Ui.text(Ui.displaySemibold, 34 * k, fg(0xFFFFFFFF));
                 ht.setTextAlign(Paint.Align.CENTER);
@@ -700,6 +701,60 @@ public class SettingsActivity extends Activity {
         private android.graphics.Bitmap[] miniCards = new android.graphics.Bitmap[3];
         private String[] miniTitles = new String[3];
         private List<HomeApps.Item> miniShelf = new ArrayList<>();
+        private android.graphics.Bitmap saverImg;
+        private String saverCaption, saverMetaText;
+
+        /** Screensaver settings: a small live screensaver (its photo, the big clock with date and weather, the caption). */
+        private void drawMiniSaver(Canvas c, float cx, float cy) {
+            float pw = 620 * k, ph = 349 * k, r = 26 * k;
+            RectF frame = new RectF(cx - pw / 2, cy - ph / 2, cx + pw / 2, cy + ph / 2);
+            tmp.set(frame);
+            tmp.offset(0, 16 * k);
+            shadow.setColor(light ? 0x33000000 : 0x80000000);
+            c.drawRoundRect(tmp, r, r, shadow);
+            c.save();
+            android.graphics.Path clip = new android.graphics.Path();
+            clip.addRoundRect(frame, r, r, android.graphics.Path.Direction.CW);
+            c.clipPath(clip);
+            Paint bp = new Paint(Paint.ANTI_ALIAS_FLAG | Paint.FILTER_BITMAP_FLAG);
+            if (saverImg != null) {
+                float sc = Math.max(pw / saverImg.getWidth(), ph / saverImg.getHeight());
+                float iw = saverImg.getWidth() * sc, ih = saverImg.getHeight() * sc;
+                c.drawBitmap(saverImg, null, new RectF(cx - iw / 2, cy - ih / 2, cx + iw / 2, cy + ih / 2), bp);
+            } else {
+                bp.setColor(0xFF1C1C1E);
+                c.drawRect(frame, bp);
+            }
+            // Soft scrims for the clock (top right) and the caption (bottom left), as on the screensaver.
+            Paint sh = new Paint();
+            sh.setShader(new android.graphics.LinearGradient(frame.left, frame.top, frame.left, frame.top + ph * 0.45f, 0x59000000, 0, android.graphics.Shader.TileMode.CLAMP));
+            c.drawRect(frame, sh);
+            sh.setShader(new android.graphics.LinearGradient(frame.left, frame.bottom, frame.left, frame.bottom - ph * 0.5f, 0x80000000, 0, android.graphics.Shader.TileMode.CLAMP));
+            c.drawRect(frame, sh);
+            float u = pw / 1920f;
+            long now = System.currentTimeMillis();
+            Paint clock = Ui.numbers(Ui.thin, 176 * u, 0xFFFFFFFF);
+            clock.setTextAlign(Paint.Align.RIGHT);
+            clock.setShadowLayer(18 * u, 0, 2 * u, 0x59000000);
+            c.drawText(Ui.clock(now), frame.right - 80 * u, frame.top + 300 * u, clock);
+            Paint small = Ui.text(Ui.semibold, 32 * u, 0xF2FFFFFF);
+            small.setTextAlign(Paint.Align.RIGHT);
+            HomeData.Weather wx = HomeData.get(getContext()).weather;
+            String top = Ui.date(now) + (Double.isNaN(wx.temp) || !Prefs.showWeather(getContext()) ? "" : "   " + HomeData.degrees(wx.temp));
+            c.drawText(top, frame.right - 84 * u, frame.top + 110 * u, small);
+            if (saverCaption != null) {
+                Paint lab = Ui.text(Ui.semibold, 22 * u, 0xB3FFFFFF);
+                lab.setLetterSpacing(0.12f);
+                c.drawText(Recs.periodLabel(), frame.left + 80 * u, frame.bottom - 230 * u, lab);
+                Paint tt = Ui.text(Ui.semibold, 64 * u, 0xFFFFFFFF);
+                c.drawText(TextUtils.ellipsize(saverCaption, new TextPaint(tt), 1000 * u, TextUtils.TruncateAt.END).toString(), frame.left + 80 * u, frame.bottom - 150 * u, tt);
+                if (saverMetaText != null && !saverMetaText.isEmpty()) {
+                    Paint mt = Ui.text(Ui.regular, 26 * u, 0xCCFFFFFF);
+                    c.drawText(saverMetaText, frame.left + 80 * u, frame.bottom - 100 * u, mt);
+                }
+            }
+            c.restore();
+        }
         private boolean blurLoading;
 
         private void loadBlurBg() {
@@ -750,6 +805,29 @@ public class SettingsActivity extends Activity {
                         cardPics[i] = android.graphics.BitmapFactory.decodeFile(cf.getPath(), co);
                     }
                     List<HomeApps.Item> shelf = HomeApps.shelf(ctx, false);
+                    // The screensaver's photo: a recommendation's (with its caption) or the screensaver's wallpaper.
+                    android.graphics.Bitmap saverPic = null;
+                    String saverTitle = null, saverMeta = null;
+                    java.io.File sf = null;
+                    if (Prefs.recsOn(ctx)) {
+                        for (Recs.Pick sp : Recs.get(ctx).showcase()) {
+                            sf = Recs.get(ctx).readyImage(sp);
+                            if (sf != null) {
+                                saverTitle = sp.title;
+                                saverMeta = sp.meta;
+                                break;
+                            }
+                        }
+                    } else {
+                        sf = Wallpapers.current(ctx, Prefs.WP_SAVER);
+                    }
+                    if (sf != null) {
+                        android.graphics.BitmapFactory.Options so = new android.graphics.BitmapFactory.Options();
+                        so.inSampleSize = 4;
+                        saverPic = android.graphics.BitmapFactory.decodeFile(sf.getPath(), so);
+                    }
+                    final android.graphics.Bitmap doneSaver = saverPic;
+                    final String doneTitle = saverTitle, doneMeta = saverMeta;
                     final android.graphics.Bitmap done = small, doneThumb = thumb;
                     handler.post(() -> {
                         blurBg = done;
@@ -757,6 +835,9 @@ public class SettingsActivity extends Activity {
                         miniCards = cardPics;
                         miniTitles = cardTitles;
                         miniShelf = shelf;
+                        saverImg = doneSaver;
+                        saverCaption = doneTitle;
+                        saverMetaText = doneMeta;
                         invalidate();
                     });
                 } catch (RuntimeException | OutOfMemoryError e) {
@@ -773,6 +854,13 @@ public class SettingsActivity extends Activity {
                     {Ui.tr("Tela inicial", "Home screen"), Ui.tr("Tema, fundo com recomendações ou papel de parede, previsão do tempo e sons.", "Theme, background with recommendations or a wallpaper, weather and sounds.")},
                     {Ui.tr("Tela de descanso", "Screensaver"), Ui.tr("Quando ela começa e qual imagem mostra.", "When it starts and which image it shows.")},
                     {Ui.tr("Sistema", "System"), Ui.tr("Atualizações, diagnóstico e os Ajustes da TV.", "Updates, diagnostics and the TV's settings.")}};
+                return t[Math.min(focus, t.length - 1)];
+            }
+            if (screen == SAVER) {
+                String[][] t = {
+                    {Ui.tr("Ver agora", "Preview"), Ui.tr("É assim que a tela de descanso aparece. OK abre ela em tela cheia.", "This is how the screensaver looks. OK opens it full screen.")},
+                    {Ui.tr("Começar após", "Start after"), Ui.tr("Quanto tempo sem usar o controle até ela aparecer.", "How long without the remote before it shows.")},
+                    {Ui.tr("Imagem", "Image"), Ui.tr("Fotos das recomendações, ou um papel de parede quando elas estão desligadas.", "The recommendations' photos, or a wallpaper when they're off.")}};
                 return t[Math.min(focus, t.length - 1)];
             }
             if (screen == HOMESCR) {
