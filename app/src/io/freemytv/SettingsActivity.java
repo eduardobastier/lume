@@ -423,7 +423,7 @@ public class SettingsActivity extends Activity {
 
         private int rowCount() {
             return screen == MAIN ? MAIN_ROWS : screen == RECS ? 5 : screen == THEME ? 3 : screen == WEATHER ? 4 : screen == WALL ? 4
-                    : screen == UPDATE ? updateRows() : screen == HOMESCR ? 7 : screen == SAVER ? 3 : 2;
+                    : screen == UPDATE ? updateRows() : screen == HOMESCR ? 6 : screen == SAVER ? 3 : 2;
         }
 
         @Override protected void onDraw(Canvas c) {
@@ -548,8 +548,8 @@ public class SettingsActivity extends Activity {
 
         private static final String[] MAIN_ICONS = {"home", "tv", "bedtime", "sync"};
         private static final int[] MAIN_COLORS = {0xFF5E5CE6, 0xFF0A84FF, 0xFFBF5AF2, 0xFF30D158};
-        private static final String[] HOME_ICONS = {"clear_night", "sparkles", "apps", "tv", "cloud", "speaker", "live_tv"};
-        private static final int[] HOME_COLORS = {0xFF636366, 0xFFFF9F0A, 0xFF0A84FF, 0xFF30D158, 0xFF64D2FF, 0xFFFF375F, 0xFFFF453A};
+        private static final String[] HOME_ICONS = {"clear_night", "sparkles", "apps", "cloud", "speaker", "live_tv"};
+        private static final int[] HOME_COLORS = {0xFF636366, 0xFFFF9F0A, 0xFF0A84FF, 0xFF64D2FF, 0xFFFF375F, 0xFFFF453A};
 
         private void drawMain(Canvas c, float seconds) {
             boolean working = busy();
@@ -630,7 +630,7 @@ public class SettingsActivity extends Activity {
 
         private int[] sectionStarts() {
             if (screen == MAIN) return new int[] {0, 3};
-            if (screen == HOMESCR) return new int[] {0, 4};
+            if (screen == HOMESCR) return new int[] {0, 3};
             return new int[] {0};
         }
 
@@ -870,7 +870,6 @@ public class SettingsActivity extends Activity {
                     {Prefs.recsOn(getContext()) ? Ui.tr("Recomendações", "Recommendations") : Ui.tr("Papel de parede", "Wallpaper"),
                             Prefs.recsOn(getContext()) ? Ui.tr("Chave do TMDB, categorias e o que o OK no card abre.", "TMDB key, genres and what OK on a card opens.")
                                     : Ui.tr("A fonte das imagens e qual aparece em cada modo.", "Where the images come from and which shows in each mode.")},
-                    {Ui.tr("Apps da barra", "Shelf apps"), Ui.tr("Marque os apps que ficam na barra. Para mudar a ordem, segure OK num app da barra.", "Tick the apps on the shelf. To reorder, hold OK on a shelf app.")},
                     {Ui.tr("Previsão do tempo", "Weather"), Ui.tr("Cidade e onde o clima aparece no topo.", "City and where the weather shows at the top.")},
                     {Ui.tr("Sons ao navegar", "Navigation sounds"), Ui.tr("Os cliques suaves ao mover o foco.", "The soft clicks when moving the focus.")},
                     {Ui.tr("TV ao Vivo", "Live TV"), Ui.tr("O app do atalho de TV ao Vivo, na gaveta de baixo.", "The app of the Live TV shortcut, in the bottom drawer.")}};
@@ -1397,19 +1396,17 @@ public class SettingsActivity extends Activity {
             boolean recsOn = Prefs.recsOn(ctx);
             String[] labels = {Ui.tr("Tema", "Theme"), Ui.tr("Fundo", "Background"),
                     recsOn ? Ui.tr("Recomendações", "Recommendations") : Ui.tr("Papel de parede", "Wallpaper"),
-                    Ui.tr("Apps da barra", "Shelf apps"),
                     Ui.tr("Previsão do tempo", "Weather"), Ui.tr("Sons ao navegar", "Navigation sounds"), Ui.tr("TV ao Vivo", "Live TV")};
             String[] values = {themes()[HomeView.theme(ctx)], backgroundName(),
                     recsOn ? (hasKey ? Prefs.genreNames(ctx) : Ui.tr("Sem chave do TMDB", "No TMDB key")) : Wallpapers.sourceName(ctx),
-                    HomeApps.shelfPackages(ctx).size() + Ui.tr(" apps", " apps"),
                     weatherName(), Prefs.sounds(ctx) ? Ui.tr("Sim", "On") : Ui.tr("Não", "Off"), liveName()};
-            for (int i = 0; i < 7; i++) {
+            for (int i = 0; i < 6; i++) {
                 layoutRow(i);
                 float f = drawRowBackground(c, i);
                 rowLabel.setColor(blend(fg(0xF2FFFFFF), INK, f));
                 float base = rowRect.centerY() + Ui.halfCap(rowLabel);
                 c.drawText(labels[i], rowIcon(c, HOME_ICONS[i], HOME_COLORS[i]), base, rowLabel);
-                if (i == 5) rowToggle(c, Prefs.sounds(ctx));
+                if (i == 4) rowToggle(c, Prefs.sounds(ctx));
                 else valueAndChevron(c, values[i], base, f);
             }
         }
@@ -2080,7 +2077,7 @@ public class SettingsActivity extends Activity {
         /** One level up: Home screen's submenus go back to it, the rest to the main list (on the row they came from). */
         private void goBack() {
             if (screen == THEME || screen == RECS || screen == WALL || screen == WEATHER) {
-                focus = screen == THEME ? 0 : screen == WEATHER ? 4 : 2;
+                focus = screen == THEME ? 0 : screen == WEATHER ? 3 : 2;
                 screen = HOMESCR;
             } else {
                 focus = screen == HOMESCR ? 1 : screen == SAVER ? 2 : screen == UPDATE ? 3 : 0;
@@ -2164,11 +2161,8 @@ public class SettingsActivity extends Activity {
                         Wallpapers.checkGithub(c, false, () -> handler.post(this::invalidate));
                         if (Wallpapers.names(c).isEmpty()) syncWallpapers();
                     }
-                } else if (focus == 3) {
-                    dockApps = HomeApps.launchableApps(c);
-                    openPopup(DOCK_POPUP);
-                } else if (focus == 4) open(WEATHER, 0);
-                else if (focus == 5) openYesNo("sounds", Ui.tr("Sons ao navegar", "Navigation sounds"));
+                } else if (focus == 3) open(WEATHER, 0);
+                else if (focus == 4) openYesNo("sounds", Ui.tr("Sons ao navegar", "Navigation sounds"));
                 else {
                     liveChoices = liveChoices();
                     openPopup(LIVE_POPUP);

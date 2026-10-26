@@ -75,6 +75,7 @@ final class HomeApps {
         float logoInk;      // fraction of the logo with ink (thin logos are drawn larger, with the same "weight")
         float logoScale = 1; // size tweak by eye (compact logos need more)
         boolean connected = true;
+        boolean inDock;     // All Apps: this app is on the home shelf (shown ticked)
     }
 
     /**
@@ -377,11 +378,11 @@ final class HomeApps {
         return out;
     }
 
-    /** Installed, enabled TV apps that are not on the home screen (the TV's Settings is among them), plus our own. */
+    /** Installed, enabled TV apps, the shelf's ticked (the TV's Settings is among them), plus our own. */
     static List<Item> others(Context c) {
         PackageManager pm = c.getPackageManager();
         Set<String> skip = new HashSet<>();
-        skip.addAll(shelfPackages(c));
+        List<String> dock = shelfPackages(c);
         skip.addAll(java.util.Arrays.asList(LIVE_TV_APPS));
         skip.add(c.getPackageName());
         skip.addAll(HIDDEN);
@@ -397,6 +398,7 @@ final class HomeApps {
             it.key = pkg;
             it.label = String.valueOf(ri.loadLabel(pm));
             it.tile = appTile(c, null, pkg, 0);
+            it.inDock = dock.contains(pkg);
             items.add(it);
         }
         Collections.sort(items, (a, b) -> a.label.toLowerCase(Locale.ROOT).compareTo(b.label.toLowerCase(Locale.ROOT)));

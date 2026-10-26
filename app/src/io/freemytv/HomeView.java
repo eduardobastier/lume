@@ -1692,12 +1692,21 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
 
     private final RectF gridBase = new RectF();
 
+    private final Paint gridHint = new Paint(Paint.ANTI_ALIAS_FLAG);
+
     private void drawSheet(Canvas c) {
         // Follows the theme like the rest: frosted light by day, darkened at night.
         c.drawColor(tone(0xE6F2F2F7, 0xA8000000));
         sheetTitle.setColor(tone(L_INK, WHITE));
         float shift = scroll.value * GRID_ROW * k;
         c.drawText(Ui.tr("Todos os Apps", "All Apps"), w / 2f, 124 * k - shift, sheetTitle);
+        if (gridHint.getTextSize() != 24 * k) {
+            gridHint.set(Ui.text(Ui.regular, 24 * k, 0xFFFFFFFF));
+            gridHint.setTextAlign(Paint.Align.CENTER);
+        }
+        gridHint.setColor(tone(0x8C1D1D1F, 0x8CFFFFFF));
+        c.drawText(Ui.tr("✓ = na barra do Início · segure OK para marcar ou desmarcar", "✓ = on the home shelf · hold OK to tick or untick"),
+                w / 2f, 168 * k - shift, gridHint);
         int n = others.size();
         if (gridLabels == null || gridLabels.length != n) {
             gridLabels = new String[n];
@@ -1718,6 +1727,14 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
             float f = gridFocus[i].value;
             drawCard(c, others.get(i).tile, base, GRID_RADIUS * k, f, 0.08f);
             if (sheetOpen && i == gridIndex) focusedCell.set(cell);
+            if (others.get(i).inDock) {
+                // On the shelf: a blue tick in the corner (hold OK to untick and take it off).
+                float cr = 19 * k, ccx = cell.right - cr - 10 * k, ccy = cell.top + cr + 10 * k;
+                fill.setShader(null);
+                fill.setColor(0xFF0A84FF);
+                c.drawCircle(ccx, ccy, cr, fill);
+                Symbols.draw(getContext(), c, "check", ccx, ccy, 20 * k, 0xFFFFFFFF);
+            }
             gridLabel.setColor(blend(tone(0x991D1D1F, 0x99FFFFFF), tone(L_INK, 0xFFFFFFFF), Ui.clamp(f)));
             c.drawText(gridLabels[i], base.centerX(), base.bottom + (40 + 6 * f) * k, gridLabel);
         }
@@ -1916,7 +1933,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         if (sheetOpen) {
             if (gridIndex >= others.size()) return false;
             it = others.get(gridIndex);
-            add = true;
+            add = !it.inDock;
         } else if (zone == Z_SHELF && !shelf.isEmpty()) {
             it = shelf.get(shelfIndex);
             add = false;
@@ -1939,12 +1956,12 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
                 setShelf(s);
                 setOthers(o);
                 if (!ok) {
-                    showToast(Ui.tr("O Início já tem o máximo de apps. Segure OK num app do Início para tirá-lo.",
-                            "The shelf is full. Hold OK on a shelf app to remove it."));
+                    showToast(Ui.tr("A barra já tem o máximo de apps. Desmarque um aqui (segure OK) para incluir outro.",
+                            "The shelf is full. Untick one here (hold OK) to add another."));
                 } else if (add) {
                     showToast(it.label + Ui.tr(" foi para o Início.", " is on the shelf now."));
                 } else {
-                    showToast(it.label + Ui.tr(" saiu do Início. Para voltar, segure OK nele em Todos os Apps.",
+                    showToast(it.label + Ui.tr(" saiu da barra. Para voltar, segure OK nele em Todos os Apps.",
                             " left the shelf. To bring it back, hold OK on it in All Apps."));
                 }
             });
@@ -1984,7 +2001,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
             tilesDirty = true;
             return true;
         }
-        return editDock();     // All Apps: hold adds the app to the shelf
+        return editDock();     // All Apps: hold ticks (adds) or unticks (removes) the app on the shelf
     }
 
     private void moveApp(int dx) {
