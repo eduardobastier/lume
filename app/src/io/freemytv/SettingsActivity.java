@@ -13,6 +13,7 @@ import android.os.Handler;
 import android.os.Looper;
 import android.os.SystemClock;
 import android.provider.Settings;
+import android.text.Layout;
 import android.text.StaticLayout;
 import android.text.TextPaint;
 import android.text.TextUtils;
@@ -240,7 +241,7 @@ public class SettingsActivity extends Activity {
         private List<String[]> liveChoices = new ArrayList<>();
         private int popup = NO_POPUP, popupFocus;
         private final Spring[] popupPop = new Spring[40];
-        private static final float LIST_X = 1000, LIST_R = 1824, LIST_TOP = 186, ROW_H = 74, ROW_GAP = 8, CHOICE_H = 104;
+        private static final float LIST_X = 1000, LIST_R = 1824, LIST_TOP = 170, ROW_H = 82, ROW_GAP = 4, CHOICE_H = 104;
         private static final int AMBER = 0xFFFFC266, INK = 0xFF1C1C1E;
 
         private final SettingsActivity activity;
@@ -375,6 +376,14 @@ public class SettingsActivity extends Activity {
             bg.setShader(new android.graphics.LinearGradient(0, 0, 0, h, light ? 0xFFF5F5F7 : 0xFF2C2C30,
                     light ? 0xFFDCDCE2 : 0xFF141416, android.graphics.Shader.TileMode.CLAMP));
             c.drawRect(0, 0, w, h, bg);
+            loadBlurBg();
+            if (blurBg != null) {
+                // The home screen's photo, blurred (a tiny picture stretched) and veiled, like tvOS behind its menus.
+                Paint p = new Paint(Paint.FILTER_BITMAP_FLAG | Paint.DITHER_FLAG);
+                c.drawBitmap(blurBg, null, new RectF(-60 * k, -60 * k, w + 60 * k, h + 60 * k), p);
+                p.setColor(light ? 0x8CF5F5F7 : 0x9E000000);
+                c.drawRect(0, 0, w, h, p);
+            }
         }
 
         /** The app's icon, big, in a rounded square (Apple TV shows the section's icon on the left). */
@@ -432,11 +441,41 @@ public class SettingsActivity extends Activity {
             drawBackdrop(c);
 
             // Apple TV's Settings: the title on top, the big icon on the left, the list on the right.
-            c.drawText(screenTitle(), 960 * k, 118 * k, title);
+            String parent = screen == MAIN ? null : (screen == THEME || screen == RECS || screen == WALL || screen == WEATHER)
+                    ? Ui.tr("Tela inicial", "Home screen") : Ui.tr("Ajustes", "Settings");
+            boolean page = choicePage();
+            if (page) {
+                c.drawText(screenTitle(), 960 * k, 84 * k, subtitle);
+                c.drawText(popupTitle(), 960 * k, 136 * k, title);
+            } else if (parent != null) {
+                c.drawText(parent, 960 * k, 84 * k, subtitle);
+                c.drawText(screenTitle(), 960 * k, 136 * k, title);
+            } else {
+                c.drawText(Ui.tr("Ajustes", "Settings"), 960 * k, 118 * k, title);
+            }
             float cx = 500 * k;
-            drawIcon(c, cx, 470 * k, 300 * k);
-            c.drawText("Lume", cx, 690 * k, subtitle);
-            c.drawText(versionName(getContext()), cx, 732 * k, version);
+            String[] info = popup == NO_POPUP ? focusInfo() : null;
+            drawMiniHome(c, cx, 440 * k);
+            if (info != null) {
+                Paint ht = Ui.text(Ui.displaySemibold, 34 * k, fg(0xFFFFFFFF));
+                ht.setTextAlign(Paint.Align.CENTER);
+                c.drawText(info[0], cx, 690 * k, ht);
+                TextPaint dp = new TextPaint(Ui.text(Ui.regular, 25 * k, fg(0x9EFFFFFF)));
+                StaticLayout sl = StaticLayout.Builder.obtain(info[1], 0, info[1].length(), dp, Math.round(600 * k))
+                        .setAlignment(Layout.Alignment.ALIGN_CENTER).setLineSpacing(0, 1.15f).build();
+                c.save();
+                c.translate(cx - 300 * k, 712 * k);
+                sl.draw(c);
+                c.restore();
+            } else {
+                c.drawText("Lume", cx, 690 * k, subtitle);
+                c.drawText(versionName(getContext()), cx, 732 * k, version);
+            }
+            if (page) {
+                drawChoicePage(c, dt);
+                return;
+            }
+            if (screen != HOME_CHOICE) drawGroups(c, rowCount());
 
             if (screen == MAIN) drawMain(c, seconds);
             else if (screen == RECS) drawRecsScreen(c);
@@ -450,6 +489,67 @@ public class SettingsActivity extends Activity {
             if (popup != NO_POPUP) drawPopup(c, dt);
         }
 
+        /** Short choices open as their own page (like tvOS), in place of the list; long grids stay popups. */
+        private boolean choicePage() {
+            return popup != NO_POPUP && popup != GENRE_POPUP && popup != LIVE_POPUP && popup != WP_PICK_POPUP
+                    && popup != WP_ROTATE_POPUP;
+        }
+
+        private void drawChoicePage(Canvas c, float dt) {
+            String[] options = popupOptions();
+            int n = Math.min(options.length, popupPop.length);
+            Paint glass = new Paint(Paint.ANTI_ALIAS_FLAG);
+            glass.setColor(light ? 0x99FFFFFF : 0x1AFFFFFF);
+            Paint line = new Paint();
+            line.setColor(light ? 0x14000000 : 0x14FFFFFF);
+            float top = LIST_TOP + 20;
+            tmp.set((LIST_X - 6) * k, (top - 6) * k, (LIST_R + 6) * k, (top + n * (ROW_H + ROW_GAP) - ROW_GAP + 6) * k);
+            c.drawRoundRect(tmp, 26 * k, 26 * k, glass);
+            for (int i = 1; i < n; i++) {
+                float y = (top + i * (ROW_H + ROW_GAP) - ROW_GAP / 2f) * k;
+                c.drawRect((LIST_X + 24) * k, y, (LIST_R - 24) * k, y + Math.max(1, k), line);
+            }
+            for (int i = 0; i < n; i++) {
+                popupPop[i].target = i == popupFocus ? 1 : 0;
+                popupPop[i].step(dt);
+                float y = (top + i * (ROW_H + ROW_GAP)) * k;
+                rowRect.set(LIST_X * k, y, LIST_R * k, y + ROW_H * k);
+                float f = Ui.clamp(popupPop[i].value);
+                if (f > 0.01f) {
+                    float sc = 1 + 0.02f * f, cx = rowRect.centerX(), cy = rowRect.centerY();
+                    tmp.set(cx - rowRect.width() * sc / 2, cy - rowRect.height() * sc / 2, cx + rowRect.width() * sc / 2, cy + rowRect.height() * sc / 2);
+                    tmp.offset(0, 10 * k * f);
+                    shadow.setColor(Ui.alpha(0xFF000000, 0.4f * f));
+                    c.drawRoundRect(tmp, 18 * k, 18 * k, shadow);
+                    tmp.offset(0, -10 * k * f);
+                    white.setAlpha(Math.round(255 * f));
+                    c.drawRoundRect(tmp, 18 * k, 18 * k, white);
+                    rowRect.set(tmp);
+                }
+                rowLabel.setColor(blend(fg(0xF2FFFFFF), INK, f));
+                c.drawText(options[i], rowRect.left + 30 * k, rowRect.centerY() + Ui.halfCap(rowLabel), rowLabel);
+                if (popupChecked(i)) {
+                    float cw = Symbols.width(getContext(), "check", 24 * k);
+                    Symbols.draw(getContext(), c, "check", rowRect.right - 30 * k - cw / 2, rowRect.centerY(), 24 * k, blend(fg(0xFF0A84FF), 0xFF0A84FF, f));
+                }
+            }
+            String note = popupNote();
+            if (!note.isEmpty()) {
+                TextPaint np = new TextPaint(Ui.text(Ui.regular, 23 * k, fg(0x8CFFFFFF)));
+                StaticLayout sl = StaticLayout.Builder.obtain(note, 0, note.length(), np, Math.round((LIST_R - LIST_X - 60) * k))
+                        .setLineSpacing(0, 1.12f).build();
+                c.save();
+                c.translate((LIST_X + 30) * k, (top + n * (ROW_H + ROW_GAP) + 24) * k);
+                sl.draw(c);
+                c.restore();
+            }
+        }
+
+        private static final String[] MAIN_ICONS = {"home", "tv", "bedtime", "sync"};
+        private static final int[] MAIN_COLORS = {0xFF5E5CE6, 0xFF0A84FF, 0xFFBF5AF2, 0xFF30D158};
+        private static final String[] HOME_ICONS = {"clear_night", "sparkles", "apps", "cloud", "speaker", "live_tv"};
+        private static final int[] HOME_COLORS = {0xFF636366, 0xFFFF9F0A, 0xFF0A84FF, 0xFF64D2FF, 0xFFFF375F, 0xFFFF453A};
+
         private void drawMain(Canvas c, float seconds) {
             boolean working = busy();
             String busyText = state.optString("busy");
@@ -459,13 +559,13 @@ public class SettingsActivity extends Activity {
             String[] values = {working ? "" : mode, themes()[HomeView.theme(getContext())] + " · " + backgroundName(), saverName(),
                     updateName()};
             for (int i = 0; i < MAIN_ROWS; i++) {
-                float y = (LIST_TOP + i * (ROW_H + ROW_GAP)) * k;
-                rowRect.set(LIST_X * k, y, LIST_R * k, y + ROW_H * k);
+                layoutRow(i);
                 float f = drawRowBackground(c, i);
                 int ink = blend(fg(0xF2FFFFFF), INK, f);
                 rowLabel.setColor(ink);
                 float base = rowRect.centerY() + Ui.halfCap(rowLabel);
-                c.drawText(labels[i], rowRect.left + 30 * k, base, rowLabel);
+                float lx = rowIcon(c, MAIN_ICONS[i], MAIN_COLORS[i]);
+                c.drawText(labels[i], lx, base, rowLabel);
                 float right = rowRect.right - 30 * k;
                 if (!(i == 0 && working)) {
                     valueAndChevron(c, values[i], base, f);
@@ -481,7 +581,7 @@ public class SettingsActivity extends Activity {
                 }
             }
 
-            float y = (LIST_TOP + MAIN_ROWS * (ROW_H + ROW_GAP) + 46) * k;
+            float y = (listEnd(MAIN_ROWS) + 46) * k;
             String error = state.optString("error");
             if (working && (busyText.contains("Permitir") || busyText.contains("Allow"))) {
                 c.drawText(Ui.tr("Na TV: marque “Sempre permitir” e aperte OK.", "On the TV: tick “Always allow” and press OK."),
@@ -514,6 +614,245 @@ public class SettingsActivity extends Activity {
                     "This product uses the TMDB API but is not endorsed or certified by TMDB."), x, y + 78 * k, version);
             version.setTextAlign(Paint.Align.CENTER);
             return y + 78 * k;
+        }
+
+        // MARK: - Apple TV look: grouped glass cards with section titles, row icons, a blurred photo behind
+
+        private static final float HEADER_H = 58;
+
+        /** Section titles and the rows they start at, for the screens that have them. */
+        private String[] sectionTitles() {
+            if (screen == MAIN) return new String[] {"LUME", Ui.tr("SISTEMA", "SYSTEM")};
+            if (screen == HOMESCR) return new String[] {Ui.tr("APARÊNCIA", "APPEARANCE"), Ui.tr("NO TOPO E NA BARRA", "TOP AND BAR")};
+            return null;
+        }
+
+        private int[] sectionStarts() {
+            if (screen == MAIN) return new int[] {0, 3};
+            if (screen == HOMESCR) return new int[] {0, 3};
+            return new int[] {0};
+        }
+
+        /** Top of row i (1080p units), after the section titles above it. */
+        private float rowTop(int i) {
+            float y = LIST_TOP + 20 + i * (ROW_H + ROW_GAP);
+            if (sectionTitles() != null) for (int start : sectionStarts()) if (start <= i) y += HEADER_H;
+            return y;
+        }
+
+        /** Where the text under a list of n rows starts. */
+        private float listEnd(int n) {
+            return n == 0 ? LIST_TOP + 20 : rowTop(n - 1) + ROW_H + 12;
+        }
+
+        private void layoutRow(int i) {
+            float y = rowTop(i) * k;
+            rowRect.set(LIST_X * k, y, LIST_R * k, y + ROW_H * k);
+        }
+
+        /** The glass cards behind each group of rows, and the groups' titles. */
+        private void drawGroups(Canvas c, int rows) {
+            if (rows <= 0) return;
+            int[] starts = sectionStarts();
+            String[] titles = sectionTitles();
+            Paint glass = new Paint(Paint.ANTI_ALIAS_FLAG);
+            glass.setColor(light ? 0x99FFFFFF : 0x1AFFFFFF);
+            Paint line = new Paint();
+            line.setColor(light ? 0x14000000 : 0x14FFFFFF);
+            for (int g = 0; g < starts.length; g++) {
+                int first = starts[g], last = (g + 1 < starts.length ? starts[g + 1] : rows) - 1;
+                if (first > last) continue;
+                if (titles != null) c.drawText(titles[g], (LIST_X + 28) * k, (rowTop(first) - 18) * k, header);
+                tmp.set((LIST_X - 6) * k, (rowTop(first) - 6) * k, (LIST_R + 6) * k, (rowTop(last) + ROW_H + 6) * k);
+                c.drawRoundRect(tmp, 26 * k, 26 * k, glass);
+                for (int i = first + 1; i <= last; i++) {
+                    float y = (rowTop(i) - ROW_GAP / 2f) * k;
+                    c.drawRect((LIST_X + 24) * k, y, (LIST_R - 24) * k, y + Math.max(1, k), line);
+                }
+            }
+        }
+
+        /** A row's colored rounded icon (iOS/tvOS style) at the left; returns where the label starts. */
+        private float rowIcon(Canvas c, String symbol, int color) {
+            float size = 50 * k, x = rowRect.left + 24 * k, cy = rowRect.centerY();
+            Paint p = new Paint(Paint.ANTI_ALIAS_FLAG);
+            p.setColor(color);
+            tmp.set(x, cy - size / 2, x + size, cy + size / 2);
+            c.drawRoundRect(tmp, 12 * k, 12 * k, p);
+            Symbols.draw(getContext(), c, symbol, x + size / 2, cy, 24 * k, 0xFFFFFFFF);
+            return x + size + 22 * k;
+        }
+
+        /** An on/off switch at the right of the row (instead of a value). */
+        private void rowToggle(Canvas c, boolean on) {
+            float tw = 76 * k, th = 44 * k, right = rowRect.right - 28 * k, cy = rowRect.centerY();
+            Paint p = new Paint(Paint.ANTI_ALIAS_FLAG);
+            p.setColor(on ? 0xFF34C759 : (light ? 0x40787880 : 0x80787880));
+            tmp.set(right - tw, cy - th / 2, right, cy + th / 2);
+            c.drawRoundRect(tmp, th / 2, th / 2, p);
+            p.setColor(0xFFFFFFFF);
+            float r = th / 2 - 4 * k;
+            c.drawCircle(on ? right - th / 2 : right - tw + th / 2, cy, r, p);
+        }
+
+        // The photo behind (the home screen's: a recommendation or the wallpaper), heavily blurred, loaded once.
+        private android.graphics.Bitmap blurBg, homeThumb;
+        private boolean blurLoading;
+
+        private void loadBlurBg() {
+            if (blurLoading || blurBg != null) return;
+            blurLoading = true;
+            final Context ctx = getContext();
+            final boolean lightNow = light;
+            new Thread(() -> {
+                java.io.File f = null;
+                try {
+                    if (Prefs.recsOn(ctx)) {
+                        Recs r = Recs.get(ctx);
+                        for (Recs.Pick p : r.showcase()) {
+                            f = r.readyImage(p);
+                            if (f != null) break;
+                        }
+                    } else {
+                        f = Wallpapers.current(ctx, lightNow ? Prefs.WP_LIGHT : Prefs.WP_DARK);
+                    }
+                    android.graphics.Bitmap small = null, thumb = null;
+                    if (f != null) {
+                        android.graphics.BitmapFactory.Options o = new android.graphics.BitmapFactory.Options();
+                        o.inSampleSize = 4;
+                        android.graphics.Bitmap b = android.graphics.BitmapFactory.decodeFile(f.getPath(), o);
+                        if (b != null) {
+                            thumb = android.graphics.Bitmap.createScaledBitmap(b, 640, 360, true);   // the mini home screen
+                            // Frosted: shrunk and box-blurred (the home screen's own frost), smooth when stretched.
+                            int[] px = Backdrop.reduce(b, 160, 90, 3, 3);
+                            small = android.graphics.Bitmap.createBitmap(px, 160, 90, android.graphics.Bitmap.Config.ARGB_8888);
+                            b.recycle();
+                        }
+                    }
+                    final android.graphics.Bitmap done = small, doneThumb = thumb;
+                    handler.post(() -> {
+                        blurBg = done;
+                        homeThumb = doneThumb;
+                        invalidate();
+                    });
+                } catch (RuntimeException | OutOfMemoryError e) {
+                    AppLog.w("settings backdrop: " + e.getMessage());
+                }
+            }, "settings-backdrop").start();
+        }
+
+        /** The focused row's name and what it's for, under the big icon (like Apple TV's Settings). */
+        private String[] focusInfo() {
+            if (screen == MAIN) {
+                String[][] t = {
+                    {Ui.tr("Início", "Home"), Ui.tr("Usar o Lume ou voltar ao Início original da TV.", "Use Lume or go back to the TV's original home screen.")},
+                    {Ui.tr("Tela inicial", "Home screen"), Ui.tr("Tema, fundo com recomendações ou papel de parede, previsão do tempo e sons.", "Theme, background with recommendations or a wallpaper, weather and sounds.")},
+                    {Ui.tr("Tela de descanso", "Screensaver"), Ui.tr("Quando ela começa e qual imagem mostra.", "When it starts and which image it shows.")},
+                    {Ui.tr("Sistema", "System"), Ui.tr("Atualizações, diagnóstico e os Ajustes da TV.", "Updates, diagnostics and the TV's settings.")}};
+                return t[Math.min(focus, t.length - 1)];
+            }
+            if (screen == HOMESCR) {
+                String[][] t = {
+                    {Ui.tr("Tema", "Theme"), Ui.tr("Claro, escuro ou automático (segue o pôr do sol).", "Light, dark or automatic (follows the sunset).")},
+                    {Ui.tr("Fundo", "Background"), Ui.tr("Recomendações mostra os filmes e séries em alta. Papel de parede deixa só a foto, o relógio e o clima.", "Recommendations shows what's trending. Wallpaper leaves just the photo, the clock and the weather.")},
+                    {Prefs.recsOn(getContext()) ? Ui.tr("Recomendações", "Recommendations") : Ui.tr("Papel de parede", "Wallpaper"),
+                            Prefs.recsOn(getContext()) ? Ui.tr("Chave do TMDB, categorias e o que o OK no card abre.", "TMDB key, genres and what OK on a card opens.")
+                                    : Ui.tr("A fonte das imagens e qual aparece em cada modo.", "Where the images come from and which shows in each mode.")},
+                    {Ui.tr("Previsão do tempo", "Weather"), Ui.tr("Cidade e onde o clima aparece no topo.", "City and where the weather shows at the top.")},
+                    {Ui.tr("Sons ao navegar", "Navigation sounds"), Ui.tr("Os cliques suaves ao mover o foco.", "The soft clicks when moving the focus.")},
+                    {Ui.tr("TV ao Vivo", "Live TV"), Ui.tr("O app do atalho de TV ao Vivo, na gaveta de baixo.", "The app of the Live TV shortcut, in the bottom drawer.")}};
+                return t[Math.min(focus, t.length - 1)];
+            }
+            return null;
+        }
+
+        /** Home screen settings: a small picture of the home screen (the photo, the top pills, cards and the shelf). */
+        private void drawMiniHome(Canvas c, float cx, float cy) {
+            float pw = 620 * k, ph = 349 * k;
+            tmp.set(cx - pw / 2, cy - ph / 2, cx + pw / 2, cy + ph / 2);
+            float r = 26 * k;
+            RectF frame = new RectF(tmp);
+            tmp.offset(0, 16 * k);
+            shadow.setColor(light ? 0x33000000 : 0x80000000);
+            c.drawRoundRect(tmp, r, r, shadow);
+            c.save();
+            android.graphics.Path clip = new android.graphics.Path();
+            clip.addRoundRect(frame, r, r, android.graphics.Path.Direction.CW);
+            c.clipPath(clip);
+            Paint p = new Paint(Paint.ANTI_ALIAS_FLAG | Paint.FILTER_BITMAP_FLAG);
+            // What the preview shows follows what has focus: the theme, the background, the weather and its place.
+            Context ctx = getContext();
+            boolean dark = !light, recsOn = Prefs.recsOn(ctx), showWx = Prefs.showWeather(ctx), wxRight = Prefs.weatherRight(ctx);
+            android.graphics.Bitmap pick = null;
+            if (screen == THEME && popup == NO_POPUP) {
+                dark = focus == 2 || (focus == 0 && HomeData.get(ctx).isNight(System.currentTimeMillis()));
+            }
+            if (popup == BG_POPUP) recsOn = popupFocus == 0;
+            if (popup == WX_POS_POPUP) wxRight = popupFocus == 1;
+            if (popup == YES_NO_POPUP && yesNoKey.equals("weather")) showWx = popupFocus == 0;
+            if ((popup == WP_PICK_POPUP || popup == WP_ROTATE_POPUP) && popupFocus < wpNames().size()) {
+                synchronized (wpThumbs) {
+                    pick = wpThumbs.get(wpNames().get(popupFocus));
+                }
+                recsOn = false;
+            }
+            // With recommendations the home screen's background is the frosted photo; with a wallpaper, the photo itself.
+            android.graphics.Bitmap pic = pick != null ? pick : recsOn ? blurBg : homeThumb;
+            if (pic != null) c.drawBitmap(pic, null, frame, p);
+            else {
+                p.setColor(dark ? 0xFF1C1C1E : 0xFFE5E5EA);
+                c.drawRect(frame, p);
+            }
+            p.setColor(dark ? 0x66000000 : 0x73FFFFFF);
+            c.drawRect(frame, p);
+            float u = pw / 1920f;
+            int glass = dark ? 0x40FFFFFF : 0xB3FFFFFF, ink = dark ? 0xF2FFFFFF : 0xFF1D1D1F;
+            p.setColor(glass);
+            // Top: the weather (middle, or right after the clock), the clock, and the two buttons.
+            float clockRight = 1650;
+            if (showWx) {
+                float wl = wxRight ? 1270 : 760, wr = wxRight ? 1650 : 1160;
+                c.drawRoundRect(new RectF(frame.left + wl * u, frame.top + 70 * u, frame.left + wr * u, frame.top + 136 * u), 33 * u, 33 * u, p);
+                if (wxRight) clockRight = 1250;
+            }
+            c.drawRoundRect(new RectF(frame.left + (clockRight - 150) * u, frame.top + 70 * u, frame.left + clockRight * u, frame.top + 136 * u), 33 * u, 33 * u, p);
+            c.drawCircle(frame.left + 1716 * u, frame.top + 103 * u, 34 * u, p);
+            c.drawCircle(frame.left + 1806 * u, frame.top + 103 * u, 34 * u, p);
+            if (recsOn) {
+                Paint t = Ui.text(Ui.semibold, 70 * u, ink);
+                c.drawText(Ui.tr("Para você", "For You"), frame.left + 80 * u, frame.top + 130 * u, t);
+                p.setColor(dark ? 0x66FFFFFF : 0x99FFFFFF);
+                c.drawRoundRect(new RectF(frame.left + 80 * u, frame.top + 262 * u, frame.left + 1120 * u, frame.top + 704 * u), 18 * u, 18 * u, p);
+                c.drawRoundRect(new RectF(frame.left + 1160 * u, frame.top + 262 * u, frame.left + 1480 * u, frame.top + 704 * u), 18 * u, 18 * u, p);
+                c.drawRoundRect(new RectF(frame.left + 1520 * u, frame.top + 262 * u, frame.left + 1840 * u, frame.top + 704 * u), 18 * u, 18 * u, p);
+            }
+            p.setColor(glass);
+            c.drawRoundRect(new RectF(frame.left + 310 * u, frame.top + 815 * u, frame.left + 1610 * u, frame.top + 1020 * u), 50 * u, 50 * u, p);
+            p.setColor(dark ? 0xCC111113 : 0xFFFFFFFF);
+            for (int i = 0; i < 4; i++) {
+                float x0 = frame.left + (340 + i * 318) * u;
+                c.drawRoundRect(new RectF(x0, frame.top + 855 * u, x0 + 270 * u, frame.top + 980 * u), 20 * u, 20 * u, p);
+            }
+            c.restore();
+        }
+
+        /** A popup's panel: the same frosted photo as the background, veiled like the list's glass cards. */
+        private void drawGlassPanel(Canvas c, RectF r) {
+            float rad = 30 * k;
+            c.save();
+            android.graphics.Path clip = new android.graphics.Path();
+            clip.addRoundRect(r, rad, rad, android.graphics.Path.Direction.CW);
+            c.clipPath(clip);
+            Paint p = new Paint(Paint.FILTER_BITMAP_FLAG | Paint.DITHER_FLAG);
+            if (blurBg != null) c.drawBitmap(blurBg, null, new RectF(-60 * k, -60 * k, w + 60 * k, h + 60 * k), p);
+            p.setColor(light ? 0xD9F2F2F7 : 0xCC1C1C1E);
+            c.drawRect(r, p);
+            c.restore();
+            Paint edge = new Paint(Paint.ANTI_ALIAS_FLAG);
+            edge.setStyle(Paint.Style.STROKE);
+            edge.setStrokeWidth(Math.max(1, 1.5f * k));
+            edge.setColor(light ? 0x14000000 : 0x26FFFFFF);
+            c.drawRoundRect(r, rad, rad, edge);
         }
 
         /** List row: no background; focused, white with a shadow (the Apple TV focus). Returns how focused it is. */
@@ -579,8 +918,7 @@ public class SettingsActivity extends Activity {
                     Prefs.anyService(ctx) ? yes : no, actions()[actionIndex()], Wallpapers.sourceName(ctx)};
             int[] rows = recsRows();
             for (int i = 0; i < rows.length; i++) {
-                float y = (LIST_TOP + 20 + i * (ROW_H + ROW_GAP)) * k;
-                rowRect.set(LIST_X * k, y, LIST_R * k, y + ROW_H * k);
+                layoutRow(i);
                 float f = drawRowBackground(c, i);
                 rowLabel.setColor(blend(fg(0xF2FFFFFF), INK, f));
                 float base = rowRect.centerY() + Ui.halfCap(rowLabel);
@@ -589,7 +927,7 @@ public class SettingsActivity extends Activity {
             }
             Paint hint = Ui.text(Ui.regular, 23 * k, fg(0x8CFFFFFF));
             c.drawText(Ui.tr("As mudanças aparecem quando você voltar ao Início.", "Changes show up when you go back home."),
-                    LIST_X * k + 30 * k, (LIST_TOP + 20 + rows.length * (ROW_H + ROW_GAP) + 40) * k, hint);
+                    LIST_X * k + 30 * k, (listEnd(rows.length) + 40) * k, hint);
         }
 
         // MARK: - Wallpaper (recommendations off): images from GitHub, fixed or rotating, home and screensaver
@@ -630,8 +968,7 @@ public class SettingsActivity extends Activity {
                     : rotating + Ui.tr(" de ", " of ") + all.size();
             String[] values = {Wallpapers.sourceName(ctx), inRotation, wallName(Prefs.WP_LIGHT), wallName(Prefs.WP_DARK)};
             for (int i = 0; i < 4; i++) {
-                float y = (LIST_TOP + 20 + i * (ROW_H + ROW_GAP)) * k;
-                rowRect.set(LIST_X * k, y, LIST_R * k, y + ROW_H * k);
+                layoutRow(i);
                 float f = drawRowBackground(c, i);
                 rowLabel.setColor(blend(fg(0xF2FFFFFF), INK, f));
                 float base = rowRect.centerY() + Ui.halfCap(rowLabel);
@@ -641,11 +978,11 @@ public class SettingsActivity extends Activity {
             Paint hint = Ui.text(Ui.regular, 23 * k, fg(0x8CFFFFFF));
             String note = Ui.tr("Baixadas na TV (até 12), nada vem dentro do app. Atualiza a cada 3 h.",
                     "Downloaded on the TV (up to 12); none come with the app. Refreshed every 3 h.");
-            c.drawText(note, LIST_X * k + 30 * k, (LIST_TOP + 20 + 4 * (ROW_H + ROW_GAP) + 40) * k, hint);
+            c.drawText(note, LIST_X * k + 30 * k, (listEnd(4) + 40) * k, hint);
             String more = wpSyncing ? Ui.tr("Baixando as imagens da fonte…", "Downloading the source's images…")
                     : (n == 0 ? (wpStatus.isEmpty() ? Ui.tr("Nenhuma imagem ainda", "No images yet") : Ui.tr("Nada encontrado nessa fonte", "Nothing found at this source")) : n + Ui.tr(n == 1 ? " imagem na TV" : " imagens na TV", n == 1 ? " image on the TV" : " images on the TV"))
                     + Ui.tr(" · trocar a fonte baixa as novas.", " · changing the source downloads new ones.");
-            c.drawText(more, LIST_X * k + 30 * k, (LIST_TOP + 20 + 4 * (ROW_H + ROW_GAP) + 80) * k, hint);
+            c.drawText(more, LIST_X * k + 30 * k, (listEnd(4) + 80) * k, hint);
         }
 
         private void syncWallpapers() {
@@ -754,12 +1091,10 @@ public class SettingsActivity extends Activity {
             float pw = WP_COLS * tw + (WP_COLS - 1) * gap + 2 * pad, ph = head + rows * (th + gap) + foot;
             float left = (1920 - pw) / 2 * k, top = Math.max(20, (1080 - ph) / 2) * k;
             Paint dim = new Paint();
-            dim.setColor(0x99000000);
+            dim.setColor(light ? 0x59F5F5F7 : 0x80000000);
             c.drawRect(0, 0, w, h, dim);
             tmp.set(left, top, left + pw * k, top + ph * k);
-            Paint panel = new Paint(Paint.ANTI_ALIAS_FLAG);
-            panel.setColor(light ? 0xFAE6E6EB : 0xF22C2C2E);
-            c.drawRoundRect(tmp, 32 * k, 32 * k, panel);
+            drawGlassPanel(c, tmp);
             Paint heading = Ui.text(Ui.displaySemibold, 34 * k, fg(0xFFFFFFFF));
             c.drawText(popupTitle(), left + pad * k, top + 64 * k, heading);
             Paint photo = new Paint(Paint.ANTI_ALIAS_FLAG | Paint.FILTER_BITMAP_FLAG);
@@ -838,8 +1173,7 @@ public class SettingsActivity extends Activity {
             String[] values = {"", minutes(saverMinutes()) + Ui.tr(" sem usar o controle", " without using the remote"),
                     Prefs.recsOn(getContext()) ? Ui.tr("Fotos das recomendações", "The recommendations' photos") : wallName(Prefs.WP_SAVER)};
             for (int i = 0; i < 3; i++) {
-                float y = (LIST_TOP + 20 + i * (ROW_H + ROW_GAP)) * k;
-                rowRect.set(LIST_X * k, y, LIST_R * k, y + ROW_H * k);
+                layoutRow(i);
                 float f = drawRowBackground(c, i);
                 rowLabel.setColor(blend(fg(0xF2FFFFFF), INK, f));
                 float base = rowRect.centerY() + Ui.halfCap(rowLabel);
@@ -852,7 +1186,7 @@ public class SettingsActivity extends Activity {
                     ? Ui.tr("A TV desliga antes (Ajustes da TV → Energia): a tela de descanso não chega a aparecer.",
                             "The TV turns off first (TV Settings → Power): the screensaver won't show.")
                     : Ui.tr("Vale para a TV toda, como nos Ajustes da TV.", "Applies to the whole TV, like TV Settings.");
-            c.drawText(note, LIST_X * k + 30 * k, (LIST_TOP + 20 + 3 * (ROW_H + ROW_GAP) + 40) * k, hint);
+            c.drawText(note, LIST_X * k + 30 * k, (listEnd(3) + 40) * k, hint);
         }
 
         // MARK: Home screen: theme, background (recommendations or wallpaper), weather, sounds, Live TV
@@ -871,18 +1205,14 @@ public class SettingsActivity extends Activity {
                     recsOn ? (hasKey ? Prefs.genreNames(ctx) : Ui.tr("Sem chave do TMDB", "No TMDB key")) : Wallpapers.sourceName(ctx),
                     weatherName(), Prefs.sounds(ctx) ? Ui.tr("Sim", "On") : Ui.tr("Não", "Off"), liveName()};
             for (int i = 0; i < 6; i++) {
-                float y = (LIST_TOP + 20 + i * (ROW_H + ROW_GAP)) * k;
-                rowRect.set(LIST_X * k, y, LIST_R * k, y + ROW_H * k);
+                layoutRow(i);
                 float f = drawRowBackground(c, i);
                 rowLabel.setColor(blend(fg(0xF2FFFFFF), INK, f));
                 float base = rowRect.centerY() + Ui.halfCap(rowLabel);
-                c.drawText(labels[i], rowRect.left + 30 * k, base, rowLabel);
-                valueAndChevron(c, values[i], base, f);
+                c.drawText(labels[i], rowIcon(c, HOME_ICONS[i], HOME_COLORS[i]), base, rowLabel);
+                if (i == 4) rowToggle(c, Prefs.sounds(ctx));
+                else valueAndChevron(c, values[i], base, f);
             }
-            Paint hint = Ui.text(Ui.regular, 23 * k, fg(0x8CFFFFFF));
-            c.drawText(Ui.tr("TV ao Vivo: o app do atalho de TV ao Vivo, na gaveta de baixo.",
-                    "Live TV: the app of the Live TV shortcut, in the bottom drawer."),
-                    LIST_X * k + 30 * k, (LIST_TOP + 20 + 6 * (ROW_H + ROW_GAP) + 40) * k, hint);
         }
 
         // MARK: Updates (GitHub releases)
@@ -992,8 +1322,7 @@ public class SettingsActivity extends Activity {
                     Ui.tr("Enviar diagnóstico", "Send diagnostics"), Ui.tr("Ajustes da TV", "TV Settings")};
             String[] values = {Updater.currentVersion(getContext()), updateStatus, Diagnostics.enabled() ? diagStatus : Ui.tr("Desligado neste APK", "Off in this APK"), ""};
             for (int i = 0; i < updateRows(); i++) {
-                float y = (LIST_TOP + 20 + i * (ROW_H + ROW_GAP)) * k;
-                rowRect.set(LIST_X * k, y, LIST_R * k, y + ROW_H * k);
+                layoutRow(i);
                 float f = drawRowBackground(c, i);
                 rowLabel.setColor(blend(fg(0xF2FFFFFF), INK, f));
                 float base = rowRect.centerY() + Ui.halfCap(rowLabel);
@@ -1011,7 +1340,7 @@ public class SettingsActivity extends Activity {
                             "From the GitHub releases (" + Config.UPDATE_REPO + "). Android asks you to confirm the install.")
                     : Ui.tr("Atualizações desligadas neste APK.", "Updates are off in this APK.");
             c.drawText(TextUtils.ellipsize(note, new TextPaint(hint), (LIST_R - LIST_X - 30) * k, TextUtils.TruncateAt.END).toString(),
-                    LIST_X * k + 30 * k, (LIST_TOP + 20 + updateRows() * (ROW_H + ROW_GAP) + 40) * k, hint);
+                    LIST_X * k + 30 * k, (listEnd(updateRows()) + 40) * k, hint);
         }
 
         private String diagStatus = "";
@@ -1057,8 +1386,7 @@ public class SettingsActivity extends Activity {
                     Prefs.manualWeather(ctx) ? Ui.tr("Cidade escolhida", "Chosen city") : Ui.tr("Automática (internet)", "Automatic (internet)"),
                     city.isEmpty() ? Ui.tr("Nenhuma", "None") : city, wxPosNames()[Prefs.weatherRight(ctx) ? 1 : 0]};
             for (int i = 0; i < 4; i++) {
-                float y = (LIST_TOP + 20 + i * (ROW_H + ROW_GAP)) * k;
-                rowRect.set(LIST_X * k, y, LIST_R * k, y + ROW_H * k);
+                layoutRow(i);
                 float f = drawRowBackground(c, i);
                 rowLabel.setColor(blend(fg(0xF2FFFFFF), INK, f));
                 float base = rowRect.centerY() + Ui.halfCap(rowLabel);
@@ -1068,7 +1396,7 @@ public class SettingsActivity extends Activity {
             Paint hint = Ui.text(Ui.regular, 23 * k, fg(0x8CFFFFFF));
             String now = HomeData.get(ctx).city;
             c.drawText(Ui.tr("Agora: ", "Now: ") + (now.isEmpty() ? "—" : now) + Ui.tr(" · o pôr do sol daqui troca o tema", " · its sunset switches the theme"),
-                    LIST_X * k + 30 * k, (LIST_TOP + 20 + 4 * (ROW_H + ROW_GAP) + 40) * k, hint);
+                    LIST_X * k + 30 * k, (listEnd(4) + 40) * k, hint);
         }
 
         private String[] wxPosNames() {
@@ -1095,8 +1423,7 @@ public class SettingsActivity extends Activity {
                     Ui.tr("Sempre claro", "Always light"), Ui.tr("Sempre escuro", "Always dark")};
             int current = HomeView.theme(getContext());
             for (int i = 0; i < 3; i++) {
-                float y = (LIST_TOP + 20 + i * (ROW_H + ROW_GAP)) * k;
-                rowRect.set(LIST_X * k, y, LIST_R * k, y + ROW_H * k);
+                layoutRow(i);
                 float f = drawRowBackground(c, i);
                 rowLabel.setColor(blend(fg(0xF2FFFFFF), INK, f));
                 float base = rowRect.centerY() + Ui.halfCap(rowLabel);
@@ -1143,7 +1470,7 @@ public class SettingsActivity extends Activity {
             Symbols.draw(getContext(), c, "chevron_right", right - cw / 2, rowRect.centerY(), 22 * k, blend(fg(0x66FFFFFF), 0x991C1C1E, f));
             if (value.isEmpty()) return;
             rowValue.setColor(blend(fg(0x8CFFFFFF), 0x8C1C1C1E, f));
-            float room = rowRect.width() * 0.55f;
+            float room = rowRect.width() * 0.48f;
             c.drawText(TextUtils.ellipsize(value, new TextPaint(rowValue), room, TextUtils.TruncateAt.END).toString(),
                     right - cw - 14 * k, base, rowValue);
         }
@@ -1271,16 +1598,17 @@ public class SettingsActivity extends Activity {
                 foot += noteLayout.getHeight() / k + 20;
             }
             float pw = cols * colW + (cols - 1) * 16 + 2 * pad, ph = head + rows * (rowH + gap) + foot;
-            float left = (1920 - pw) / 2 * k, top = (1080 - ph) / 2 * k;
+            // Over the list (right), so the preview on the left shows what the focused option would do.
+            float left = Math.min((LIST_X + (LIST_R - LIST_X) / 2 - pw / 2), 1920 - 40 - pw) * k, top = (1080 - ph) / 2 * k;
+            if (left < 40 * k) left = (1920 - pw) / 2 * k;
             Paint dim = new Paint();
-            dim.setColor(0x99000000);
+            dim.setColor(light ? 0x59F5F5F7 : 0x80000000);
             c.drawRect(0, 0, w, h, dim);
+            if (left > 840 * k) drawMiniHome(c, 500 * k, 440 * k);
             tmp.set(left, top, left + pw * k, top + ph * k);
             shadow.setColor(0x80000000);
             c.drawRoundRect(tmp, 32 * k, 32 * k, shadow);
-            Paint panel = new Paint(Paint.ANTI_ALIAS_FLAG);
-            panel.setColor(light ? 0xFAE6E6EB : 0xF22C2C2E);
-            c.drawRoundRect(tmp, 32 * k, 32 * k, panel);
+            drawGlassPanel(c, tmp);
             Paint heading = Ui.text(Ui.displaySemibold, 34 * k, fg(0xFFFFFFFF));
             c.drawText(popupTitle(), left + pad * k + 10 * k, top + 62 * k, heading);
             for (int i = 0; i < options.length; i++) {
