@@ -117,8 +117,11 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
     // At the top: tabs (0 to 2) and icon-only buttons (3 to 5); the three cards
     private int tab, topIndex, cardIndex;
     private List<Recs.Pick> cards = new ArrayList<>();
-    private final Spring[] topFocus = new Spring[6];
-    private final RectF[] topRects = new RectF[6];
+    private final Spring[] topFocus = new Spring[7];      // 0-2 tabs, 3-5 round buttons, 6 the weather pill
+    private final RectF[] topRects = new RectF[7];
+    private static final int TOP_WX = 6;
+    private boolean weatherOnly;
+    private boolean menuOnly;        // the bottom panel as a popup of inputs and shortcuts (opened from the gear)     // the bottom panel shows only the weather (opened from the weather pill)
     private final Spring[] cardFocus = new Spring[3];
     private final RectF[] cardRects = new RectF[3];
     private final List<HomeApps.Item> lightButtons = new ArrayList<>();
@@ -303,7 +306,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         for (View v : new View[] {heroLayer, status, platter, tiles, drawerLayer, sheetLayer}) v.setLayerType(LAYER_TYPE_HARDWARE, null);
         for (View v : new View[] {sky, heroLayer, status, platter, tiles, drawerLayer, sheetLayer, toastLayer}) addView(v);
         drawerLayer.setVisibility(INVISIBLE);
-        for (int i = 0; i < 6; i++) {
+        for (int i = 0; i < 7; i++) {
             topFocus[i] = new Spring(0.26f, 0.85f, 0);
             topRects[i] = new RectF();
         }
@@ -518,7 +521,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         // cheaper for the GPU to composite on every frame of the drawer animation.
         measure(platter, width, Math.round(320 * kk));
         measure(tiles, width, Math.round(270 * kk));
-        measure(drawerLayer, width, Math.round(600 * kk));
+        measure(drawerLayer, width, height);     // full screen: it holds the popups (weather, gear, hold menu)
         measure(sheetLayer, width, height);
         measure(toastLayer, Math.round(1000 * kk), Math.round(220 * kk));
         setMeasuredDimension(width, height);
@@ -536,7 +539,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         place(status, width - status.getMeasuredWidth(), 0);
         place(platter, 0, Math.round(750 * kk));
         place(tiles, 0, Math.round(790 * kk));
-        place(drawerLayer, 0, Math.round(470 * kk));
+        place(drawerLayer, 0, 0);
         sheetLayer.layout(0, 0, width, height);
         sheetLayer.setPivotX(width / 2f);
         sheetLayer.setPivotY(height / 2f);
@@ -760,6 +763,23 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
     /** Drawer and sheet: the layers' positions and opacity (without redrawing their content). */
     private void updateMotion() {
         float d = drawer.value, dc = Ui.clamp(d), s = Ui.clamp(sheet.value);
+        if (weatherOnly || menuOnly || holdMenu || wxPopupFading) {
+            // The weather popup: nothing slides; the home screen blurs and dims behind a panel in the middle.
+            float home = (1 - s) * (1 - 0.35f * dc);     // dimmed behind the popup
+            show(heroLayer, home, 0);
+            show(status, home, 0);
+            show(platter, home, 0);
+            show(tiles, home, 0);
+            setBlur(dc);
+            // The drawer layer (600 tall, laid out from y 470) moved up so its middle is the screen's middle.
+            drawerLayer.setTranslationY(0);
+            drawerLayer.setScaleX(0.96f + 0.04f * dc);
+            drawerLayer.setScaleY(0.96f + 0.04f * dc);
+            drawerLayer.setAlpha(dc);
+            drawerLayer.setVisibility(dc > 0.002f ? VISIBLE : INVISIBLE);
+            if (!weatherOnly && !menuOnly && !holdMenu && dc < 0.002f) wxPopupFading = false;
+            return;
+        }
         float home = 1 - s, top = home * (1 - smoothstep(0, 0.32f, dc));
         float shift = SHIFT * k;
         float lift = -d * shift;
@@ -776,6 +796,16 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         float scale = 1.04f - 0.04f * s;
         sheetLayer.setScaleX(scale);
         sheetLayer.setScaleY(scale);
+    }
+
+    private boolean wxPopupFading;
+
+    /** Blurs the home screen's layers behind the weather popup (Android 12+; older TVs only dim). */
+    private void setBlur(float amount) {
+        if (android.os.Build.VERSION.SDK_INT < 31) return;
+        android.graphics.RenderEffect e = amount < 0.01f ? null
+                : android.graphics.RenderEffect.createBlurEffect(40 * k * amount, 40 * k * amount, Shader.TileMode.CLAMP);
+        for (View v : new View[] {sky, heroLayer, status, platter, tiles}) v.setRenderEffect(e);
     }
 
     private static void show(View v, float alpha, float translationY) {
@@ -1283,6 +1313,18 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         shadowDeep.setColor(Ui.alpha(0xFF000000, tone(0.14f, 0.3f) + tone(0.18f, 0.3f) * fc));
         drawShadow(c, tmp, r0, 30 * k, shadowDeep.getColor());
         c.restore();
+        if (it.fill != 0 && it.logo != null) {
+            // Icon-only app: the card in the icon's own color, the icon on it as it is.
+            // The icon's own top-to-bottom gradient, stretched over the card from where the icon starts and ends.
+            Bitmap lg = crispLogo(it, false);
+            float ih = lg == null ? cell.height() : lg.getHeight() * s / (1 + FOCUS_GROW);
+            tileFill.setShader(new LinearGradient(0, cell.centerY() - ih / 2, 0, cell.centerY() + ih / 2,
+                    it.fill, it.fillBottom, Shader.TileMode.CLAMP));
+            c.drawRoundRect(cell, r, r, tileFill);
+            tileFill.setShader(null);
+            drawLogo(c, it, cell, s, 0);
+            return;
+        }
         int[] style = TILE_STYLE.get(it.key);
         // The white tile needs the dark version of the logo (assets/logos/<key>-dark.png); without it, a logo lifted
         // from the TV art has white letters, so it goes on a dark tile instead.
@@ -1434,6 +1476,89 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         drawerDirty = true;
     }
 
+    /** The weather pill's OK: the bottom panel rises with only the big weather (and prices); any key closes it. */
+    private void openWeather() {
+        weatherOnly = true;
+        wxPopupFading = true;
+        motionDirty = true;
+        drawerOpen = true;
+        drawer.target = 1;
+        zone = Z_DRAWER;
+        drawerDirty = true;
+        weatherStale = true;
+        click.open();
+    }
+
+    /** The gear popup's rows, top to bottom: the shortcuts first, then the inputs (indexes into drawerItems). */
+    private int[] menuOrder() {
+        int n = drawerItems.size(), j = 0;
+        int[] out = new int[n];
+        for (int i = drawerInputs; i < n; i++) out[j++] = i;
+        for (int i = 0; i < drawerInputs; i++) out[j++] = i;
+        return out;
+    }
+
+    /**
+     * The gear popup: a glass side panel on the right (like tvOS's Control Center), "Atalhos" then "Entradas", one
+     * row each with a rounded icon; the focused row in white. Drawn in the drawer layer, moved up by 450 (draw lower).
+     */
+    private void drawMenuPanel(Canvas c) {
+        float pw = 600 * k, rowH = 92 * k, head = 64 * k;
+        float left = w - 44 * k - pw, top = 44 * k;
+        int[] order = menuOrder();
+        int shortcuts = drawerItems.size() - drawerInputs;
+        float ph = 36 * k + 2 * head + order.length * rowH + 36 * k;
+        RectF panel = new RectF(left, top, left + pw, top + ph);
+        drawerGlass(c, panel, 40 * k, 0.72f, 0x33000000, 14 * k);
+        float y = top + 36 * k;
+        Paint label = Ui.text(Ui.semibold, 30 * k, drawerInk(0.95f)), sub = Ui.text(Ui.medium, 22 * k, tone(L_DIM, 0x8CFFFFFF));
+        sub.setTextAlign(Paint.Align.RIGHT);
+        for (int pos = 0; pos < order.length; pos++) {
+            if (pos == 0 || pos == shortcuts) {
+                c.drawText(pos == 0 ? Ui.tr("ATALHOS", "SHORTCUTS") : Ui.tr("ENTRADAS", "INPUTS"), left + 38 * k, y + 40 * k, rowTitle);
+                y += head;
+            }
+            int i = order[pos];
+            HomeApps.Item it = drawerItems.get(i);
+            float f = Ui.clamp(drawerFocus[i].value);
+            RectF r = new RectF(left + 20 * k, y, left + pw - 20 * k, y + rowH - 10 * k);
+            if (f > 0.01f) {
+                fill.setShader(null);
+                fill.setColor(Ui.alpha(0xFFFFFFFF, f));
+                c.drawRoundRect(r, 24 * k, 24 * k, fill);
+            }
+            boolean off2 = it.kind == HomeApps.INPUT && !it.connected;
+            float a = off2 ? 0.45f : 1f;
+            RectF ic = new RectF(r.left + 18 * k, r.centerY() - 28 * k, r.left + 74 * k, r.centerY() + 28 * k);
+            fill.setColor(f > 0.5f ? 0xFF0A84FF : Ui.alpha(tone(0xFF000000, 0xFFFFFFFF), 0.1f * a));
+            c.drawRoundRect(ic, 16 * k, 16 * k, fill);
+            int ink = f > 0.5f ? 0xFFFFFFFF : Ui.alpha(drawerInk(1), a);
+            Symbols.draw(getContext(), c, it.symbol, ic.centerX(), ic.centerY(), 28 * k, ink);
+            label.setColor(f > 0.5f ? L_INK : Ui.alpha(drawerInk(0.95f), a));
+            c.drawText(it.label, ic.right + 24 * k, r.centerY() + Ui.halfCap(label), label);
+            if (it.kind == HomeApps.INPUT) {
+                sub.setColor(f > 0.5f ? 0x991C1C1E : Ui.alpha(tone(L_DIM, 0x8CFFFFFF), a));
+                c.drawText(it.connected ? Ui.tr("Conectado", "Connected") : Ui.tr("Desligado", "Off"), r.right - 24 * k, r.centerY() + Ui.halfCap(sub), sub);
+            }
+            y += rowH;
+        }
+    }
+
+    /** The gear's OK: a popup with the inputs (HDMI, Live TV) and the shortcuts, over the blurred home screen. */
+    private void openMenu() {
+        if (drawerItems.isEmpty()) return;
+        menuOnly = true;
+        wxPopupFading = true;
+        motionDirty = true;
+        drawerOpen = true;
+        drawer.target = 1;
+        zone = Z_DRAWER;
+        drawerIndex = menuOrder()[0];
+        for (int i = 0; i < drawerFocus.length; i++) drawerFocus[i].snap(i == drawerIndex ? 1 : 0);
+        drawerDirty = true;
+        click.open();
+    }
+
     private void openDrawer() {
         if (drawerItems.isEmpty()) return;
         drawerOpen = true;
@@ -1448,6 +1573,16 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         drawerOpen = false;
         drawer.target = 0;
         zone = Z_SHELF;
+        if (weatherOnly || menuOnly) {
+            int back = weatherOnly ? TOP_WX : 3 + lightButtons.size() - 1;     // the weather pill, or the gear
+            weatherOnly = menuOnly = false;
+            wxPopupFading = true;
+            motionDirty = true;
+            zone = Z_TOP;
+            topIndex = back;
+            for (Spring f : drawerFocus) f.snap(0);
+            return;
+        }
         for (Spring f : drawerFocus) f.snap(0);   // the drawer goes away: its focus doesn't need to animate
         if (!shelf.isEmpty() && drawerIndex < drawerRects.length) shelfIndex = nearest(tileRects, drawerRects[drawerIndex].centerX());
     }
@@ -1475,7 +1610,27 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
     }
 
     private void drawDrawer(Canvas c) {
-        if (drawerItems.isEmpty()) return;
+        // While a popup fades out, keep drawing that popup (never the old bottom drawer).
+        if (wxPopupFading && !weatherOnly && !menuOnly && !holdMenu) {
+            if (lastPopup == 1) {
+                weatherOnly = true;
+                drawDrawer(c);
+                weatherOnly = false;
+            } else if (lastPopup == 2) {
+                menuOnly = true;
+                drawMenuPanel(c);
+                menuOnly = false;
+            }
+            return;     // the hold menu just disappears (All Apps or the move takes over)
+        }
+        if (holdMenu) lastPopup = 3;
+        else if (weatherOnly) lastPopup = 1;
+        else if (menuOnly) lastPopup = 2;
+        if (holdMenu) {
+            drawHoldMenu(c);
+            return;
+        }
+        if (drawerItems.isEmpty() && !weatherOnly) return;
         rowTitle.setColor(tone(L_DIM, 0xB3FFFFFF));
         cardTitle.setColor(tone(L_DIM, 0xB3FFFFFF));
         cardText.setColor(drawerInk(0.95f));
@@ -1486,12 +1641,29 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         hourTemp.setColor(drawerInk(0.95f));
         pricePaint.setColor(drawerInk(0.95f));
         float titleBase = ROW_TITLE * k;
-        if (drawerInputs > 0) c.drawText(Ui.tr("Entradas", "Inputs"), drawerRects[0].left + 4 * k, titleBase, rowTitle);
-        if (drawerInputs < drawerItems.size()) c.drawText(Ui.tr("Atalhos", "Shortcuts"), drawerRects[drawerInputs].left + 4 * k, titleBase, rowTitle);
+        if (menuOnly) {
+            drawMenuPanel(c);
+            return;
+        }
+        if (!weatherOnly && drawerInputs > 0) c.drawText(Ui.tr("Entradas", "Inputs"), drawerRects[0].left + 4 * k, titleBase, rowTitle);
+        if (!weatherOnly && drawerInputs < drawerItems.size()) c.drawText(Ui.tr("Atalhos", "Shortcuts"), drawerRects[drawerInputs].left + 4 * k, titleBase, rowTitle);
         int top = -1;
         for (int i = 0; i < drawerItems.size(); i++) if (drawerFocus[i].value > 0.02f && (top < 0 || drawerFocus[i].value > drawerFocus[top].value)) top = i;
+        if (weatherOnly) {
+            // Popup: the weather card centered on the screen, bigger (the layer is shifted up by 230: draw lower).
+            float pw = 1100 * k, ph = CARDS_H * k * 1.25f, cy = h / 2f;
+            RectF r = new RectF((w - pw) / 2, cy - ph / 2, (w + pw) / 2, cy + ph / 2);
+            c.save();
+            float sc = 1.25f;
+            c.translate(r.left, r.top);
+            c.scale(sc, sc);
+            drawWeatherCard(c, new RectF(0, 0, pw / sc, ph / sc));
+            c.restore();
+            return;
+        }
         for (int i = 0; i < drawerItems.size(); i++) if (i != top) drawDrawerTile(c, i);
         if (top >= 0) drawDrawerTile(c, top);
+        if (menuOnly) return;
         // The weather card is recorded once and replayed while only the focus moves in the drawer (redrawing its
         // glass and text on every frame of a focus change made the drawer stutter on the TV).
         if (!Prefs.showWeather(getContext())) {
@@ -1622,7 +1794,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         // Only the group whose focus changed is redrawn (moving along the shelf doesn't redraw the hero or capsule).
         boolean tilesChanged = aim(tileFocus, !sheetOpen && zone == Z_SHELF ? shelfIndex : -1, snap);
         boolean statusChanged = aim(statusFocus, !sheetOpen && zone == Z_STATUS ? statusIndex : -1, snap);
-        boolean drawerChanged = aim(drawerFocus, !sheetOpen && zone == Z_DRAWER ? drawerIndex : -1, snap);
+        boolean drawerChanged = aim(drawerFocus, !sheetOpen && zone == Z_DRAWER && !weatherOnly ? drawerIndex : -1, snap);
         boolean heroChanged = heroFocus.target != (!sheetOpen && zone == Z_HERO ? 1 : 0);
         heroFocus.target = !sheetOpen && zone == Z_HERO ? 1 : 0;
         if (snap) heroFocus.snap(heroFocus.target);
@@ -1874,6 +2046,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
     // MARK: - Keys: only the arrows, OK and Back (system keys pass through to the system)
 
     boolean onKey(KeyEvent e) {
+        if (holdMenu) return holdMenuKey(e);
         boolean down = e.getAction() == KeyEvent.ACTION_DOWN;
         switch (e.getKeyCode()) {
             case KeyEvent.KEYCODE_DPAD_LEFT:
@@ -1994,14 +2167,102 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
 
     private boolean holdOk() {
         if (!sheetOpen && zone == Z_SHELF && !shelf.isEmpty() && shelf.get(shelfIndex).kind == HomeApps.APP) {
-            moving = true;
+            // A small menu: move this app, or open All Apps.
+            holdMenu = true;
+            holdIndex = 0;
+            wxPopupFading = true;
+            motionDirty = true;
+            drawerOpen = true;
+            drawer.target = 1;
+            drawerDirty = true;
             click.open();
-            showToast(Ui.tr("Use ← e → para mudar " + shelf.get(shelfIndex).label + " de lugar. OK ou Voltar para terminar.",
-                    "Use ← and → to move " + shelf.get(shelfIndex).label + ". OK or Back when done."));
-            tilesDirty = true;
             return true;
         }
         return editDock();     // All Apps: hold ticks (adds) or unticks (removes) the app on the shelf
+    }
+
+    private boolean holdMenu;
+    private int lastPopup;     // 1 weather, 2 gear panel, 3 hold menu: what to keep drawing while it fades out
+    private int holdIndex;
+
+    private void closeHoldMenu() {
+        holdMenu = false;
+        drawerOpen = false;
+        drawer.target = 0;
+        motionDirty = true;
+        drawerDirty = true;
+    }
+
+    /** Keys while the hold menu is open: ↑/↓ choose, OK does it, Back closes. */
+    private boolean holdMenuKey(KeyEvent e) {
+        boolean down = e.getAction() == KeyEvent.ACTION_DOWN;
+        switch (e.getKeyCode()) {
+            case KeyEvent.KEYCODE_DPAD_UP:
+            case KeyEvent.KEYCODE_DPAD_DOWN:
+                if (down) {
+                    int to = e.getKeyCode() == KeyEvent.KEYCODE_DPAD_UP ? 0 : 1;
+                    if (to != holdIndex) {
+                        holdIndex = to;
+                        click.move();
+                        drawerDirty = true;
+                    }
+                }
+                return true;
+            case KeyEvent.KEYCODE_DPAD_CENTER:
+            case KeyEvent.KEYCODE_ENTER:
+            case KeyEvent.KEYCODE_NUMPAD_ENTER:
+                if (!down && !e.isCanceled()) {
+                    if (!okDown) {     // the release of the long press that opened the menu
+                        okDown = true;
+                        return true;
+                    }
+                    okDown = false;
+                    closeHoldMenu();
+                    click.open();
+                    if (holdIndex == 0) {
+                        moving = true;
+                        showToast(Ui.tr("Use ← e → para mudar " + shelf.get(shelfIndex).label + " de lugar. OK ou Voltar para terminar.",
+                                "Use ← and → to move " + shelf.get(shelfIndex).label + ". OK or Back when done."));
+                        tilesDirty = true;
+                    } else {
+                        openSheet();
+                    }
+                }
+                return true;
+            case KeyEvent.KEYCODE_BACK:
+                if (!down && !e.isCanceled()) {
+                    closeHoldMenu();
+                    click.move();
+                }
+                return true;
+            default:
+                return true;
+        }
+    }
+
+    /** The hold menu: a small glass card above the focused app, two rows. */
+    private void drawHoldMenu(Canvas c) {
+        float mw = 460 * k, rowH = 84 * k, pad = 18 * k, mh = 2 * rowH + 2 * pad;
+        float cx = tileRects.length > shelfIndex ? tileRects[shelfIndex].centerX() : w / 2f;
+        float left = Math.max(40 * k, Math.min(w - 40 * k - mw, cx - mw / 2)), bottom = (tileRects.length > 0 ? tileRects[0].top : h - 200 * k) - 40 * k;
+        RectF panel = new RectF(left, bottom - mh, left + mw, bottom);
+        drawerGlass(c, panel, 32 * k, 0.72f, 0x33000000, 12 * k);
+        String[] labels = {Ui.tr("Mudar de lugar", "Move"), Ui.tr("Todos os Apps", "All Apps")};
+        String[] icons = {"sync", "apps"};
+        Paint label = Ui.text(Ui.semibold, 30 * k, 0xFFFFFFFF);
+        for (int i = 0; i < 2; i++) {
+            RectF r = new RectF(left + pad, panel.top + pad + i * rowH, left + mw - pad, panel.top + pad + (i + 1) * rowH - 8 * k);
+            boolean on = i == holdIndex;
+            if (on) {
+                fill.setShader(null);
+                fill.setColor(0xFFFFFFFF);
+                c.drawRoundRect(r, 22 * k, 22 * k, fill);
+            }
+            int ink = on ? L_INK : drawerInk(0.95f);
+            Symbols.draw(getContext(), c, icons[i], r.left + 44 * k, r.centerY(), 28 * k, on ? 0xFF0A84FF : ink);
+            label.setColor(ink);
+            c.drawText(labels[i], r.left + 84 * k, r.centerY() + Ui.halfCap(label), label);
+        }
     }
 
     private void moveApp(int dx) {
@@ -2043,6 +2304,33 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
             moveGrid(dx, dy);
             return;
         }
+        if (zone == Z_DRAWER && menuOnly) {
+            // Up/down along the panel's rows; left closes it.
+            int[] order = menuOrder();
+            int at = 0;
+            for (int i = 0; i < order.length; i++) if (order[i] == drawerIndex) at = i;
+            if (dy != 0) {
+                int to = Math.max(0, Math.min(order.length - 1, at + dy));
+                if (to == at) return;
+                drawerIndex = order[to];
+            } else if (dx < 0) {
+                closeDrawer();
+            } else {
+                return;
+            }
+            retarget(false);
+            click.move();
+            drawerDirty = true;
+            return;
+        }
+        if (zone == Z_DRAWER && weatherOnly) {
+            if (dy < 0) {     // up closes the weather panel, back to its pill
+                closeDrawer();
+                retarget(false);
+                click.move();
+            }
+            return;
+        }
         if (moveLight(dx, dy)) return;
         switch (zone) {
             case Z_SHELF:
@@ -2060,8 +2348,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
                         return;
                     }
                 } else {
-                    if (drawerItems.isEmpty()) return;
-                    openDrawer();
+                    return;     // no bottom drawer any more (the weather opens from its pill at the top)
                 }
                 break;
             case Z_HERO:
@@ -2158,16 +2445,30 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
             it = statusItems.get(statusIndex);
             r = statusRects[statusIndex];
         } else if (zone == Z_DRAWER) {
+            if (weatherOnly) {     // the weather panel: OK closes it
+                closeDrawer();
+                retarget(false);
+                click.move();
+                return;
+            }
             if (drawerItems.isEmpty()) return;
             it = drawerItems.get(drawerIndex);
             r = drawerRects[drawerIndex];
         } else if (zone == Z_TOP) {
+            if (topIndex == TOP_WX) {
+                openWeather();
+                return;
+            }
             if (topIndex < 3) {
                 selectTab(topIndex);
                 return;
             }
             it = lightButtons.get(topIndex - 3);
             r = topRects[topIndex];
+            if (it.kind == HomeApps.SETTINGS) {     // the gear: the inputs and shortcuts popup
+                openMenu();
+                return;
+            }
         } else if (zone == Z_CARDS) {
             Recs.Pick p = cardIndex < cards.size() ? cards.get(cardIndex) : null;
             if (p == null) return;
@@ -2484,6 +2785,13 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         tmp.offset(0, 6 * k);
         drawShadow(c, tmp, bh / 2, 26 * k, Ui.alpha(0xFF000000, tone(0.1f, 0.3f)));
         scene.liquid(c, r, bh / 2, tone(0xFFFFFFFF, SMOKE), tone(0.55f, 0.5f), tone(0.02f, 0.01f), 12 * k, 8 * k, tone(0.6f, 0.45f), 1);
+        float wf = Ui.clamp(topFocus[TOP_WX].value);
+        if (wf > 0.01f) {     // focused: white like the round buttons, dark text
+            fill.setShader(null);
+            fill.setColor(Ui.alpha(0xFFFFFFFF, wf));
+            c.drawRoundRect(r, bh / 2, bh / 2, fill);
+            lWx.setColor(blend(tone(L_INK, 0xEBFFFFFF), L_INK, wf));
+        }
         float x = mid - width / 2, base = cy + Ui.halfCap(lWx);
         Symbols.draw(getContext(), c, symbol, x + sw / 2, base - Ui.halfCap(lWx), size, lWx.getColor());
         c.drawText(now, x + sw + 14 * k, base, lWx);
@@ -2695,7 +3003,13 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
                 break;
             case Z_TOP:
                 if (dx != 0) {
-                    int next = Math.max(recsOff ? 3 : 0, Math.min(2 + lightButtons.size(), topIndex + dx));
+                    // Left to right: the tabs, the weather pill (when shown), the round buttons.
+                    List<Integer> order = new ArrayList<>();
+                    if (!recsOff) for (int i = 0; i < 3; i++) order.add(i);
+                    if (wxShown) order.add(TOP_WX);
+                    for (int i = 0; i < lightButtons.size(); i++) order.add(3 + i);
+                    int at = order.indexOf(topIndex), to = Math.max(0, Math.min(order.size() - 1, at + dx));
+                    int next = order.get(to);
                     if (next == topIndex) return true;
                     topIndex = next;
                     if (topIndex < 3) selectTab(topIndex);   // like Apple TV tabs: focusing a tab selects it
@@ -2704,7 +3018,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
                         zone = Z_SHELF;
                     } else {
                         zone = Z_CARDS;
-                        cardIndex = nearest(cardRects, cards.size(), topRects[topIndex].centerX());
+                        cardIndex = nearest(cardRects, cards.size(), (topIndex == TOP_WX ? weatherRect : topRects[topIndex]).centerX());
                     }
                 } else {
                     return true;

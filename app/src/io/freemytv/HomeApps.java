@@ -75,7 +75,8 @@ final class HomeApps {
         float logoInk;      // fraction of the logo with ink (thin logos are drawn larger, with the same "weight")
         float logoScale = 1; // size tweak by eye (compact logos need more)
         boolean connected = true;
-        boolean inDock;     // All Apps: this app is on the home shelf (shown ticked)
+        boolean inDock;
+        int fill, fillBottom; // icon-only apps: the card continues the icon's background, top to bottom (0 = Lume's card)     // All Apps: this app is on the home shelf (shown ticked)
     }
 
     /**
@@ -125,6 +126,38 @@ final class HomeApps {
             Item it = new Item();
             it.kind = APP;
             it.pkg = pkg;
+            if (iconOnly(pkg, label(pm, pkg))) {
+                // Apps whose TV art has the name beside the icon: just the icon, as it is.
+                it.key = pkg;
+                it.label = d != null ? d[1] : label(pm, pkg);
+                it.tile = appTile(c, null, pkg, 0);
+                boolean art = Prefs.shelfArt(c);
+                // "App logo": the whole icon (rounded) on Lume's card, which follows the theme. "App art": the icon
+                // without its rim, its own background (and gradient) filling the whole card.
+                it.logo = art ? iconLogo(c, pkg, true) : iconGlyph(c, pkg);
+                it.logoDark = art ? it.logo : null;     // logo mode: made below for the light tile, like the others
+                if (it.logo != null) {
+                    if (art) {
+                        it.fill = edgeColor(it.logo, true);
+                        it.fillBottom = edgeColor(it.logo, false);
+                        if (it.fill == 0 || it.fillBottom == 0) it.fill = it.fillBottom = 0;
+                    }
+                    // Art: the icon as big as the tile allows; logo: sized like the other logos (same "ink").
+                    it.logoInk = art ? 0.12f : ink(it.logo);
+                    it.logoScale = art ? 1.5f : 1.1f;
+                    if (!art) it.logoDark = onLight("glyph:" + pkg, it.logo);
+                    items.add(it);
+                    continue;
+                }
+            }
+            if (Prefs.shelfArt(c)) {
+                // "App art" (the icon-only apps above keep their icon): the app's own TV art as it is (its colors and background), nothing cut out.
+                it.key = d != null ? d[0] : pkg;
+                it.label = d != null ? d[1] : label(pm, pkg);
+                it.tile = artTile(c, pkg);
+                items.add(it);
+                continue;
+            }
             if (d != null) {
                 it.key = d[0];
                 it.label = d[1];
@@ -146,6 +179,176 @@ final class HomeApps {
         return items;
     }
 
+    /**
+     * Apps shown by their icon alone (their TV art puts the name beside a small icon): any package whose name has one
+     * of these words, so other builds of the same app (UniTV, YouCine, Velo Play) look the same.
+     */
+    private static final String[] ICON_ONLY_WORDS = {"unitv", "youcine", "veloplay"};
+
+    private static boolean iconOnly(String pkg, String label) {
+        // The package or the app's name ("UniTV", "Velo Play": spaces and case ignored).
+        String p = pkg.toLowerCase(Locale.ROOT), n = label == null ? "" : label.toLowerCase(Locale.ROOT).replaceAll("[^a-z0-9]", "");
+        for (String w : ICON_ONLY_WORDS) if (p.contains(w) || n.contains(w)) return true;
+        return false;
+    }
+
+    /** The app's icon at full size (adaptive icons in a rounded square), for the shelf; null if it has none. */
+    private static Bitmap iconLogo(Context c, String pkg, boolean cutRim) {
+        String key = (cutRim ? "iconcut:" : "icon:") + pkg;
+        synchronized (LOGOS) {
+            if (LOGOS.containsKey(key)) return LOGOS.get(key);
+        }
+        Bitmap b = null;
+        try {
+            PackageManager pm = c.getPackageManager();
+            ApplicationInfo ai = pm.getApplicationInfo(pkg, 0);
+            Drawable icon = null;
+            if (ai.icon != 0) {
+                try {
+                    icon = pm.getResourcesForApplication(ai).getDrawableForDensity(ai.icon, DisplayMetrics.DENSITY_XXXHIGH, null);
+                } catch (RuntimeException ignored) {
+                }
+            }
+            if (icon == null) icon = pm.getApplicationIcon(ai);
+            int size = 384;
+            b = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888);
+            Canvas canvas = new Canvas(b);
+            if (icon instanceof AdaptiveIconDrawable) {
+                AdaptiveIconDrawable a = (AdaptiveIconDrawable) icon;
+                Path clip = new Path();
+                clip.addRoundRect(new RectF(0, 0, size, size), size * 0.2237f, size * 0.2237f, Path.Direction.CW);
+                canvas.clipPath(clip);
+                int pad = size / 4;
+                for (Drawable layer : new Drawable[] {a.getBackground(), a.getForeground()}) {
+                    if (layer == null) continue;
+                    layer.setBounds(-pad, -pad, size + pad, size + pad);
+                    layer.draw(canvas);
+                }
+            } else {
+                icon.setBounds(0, 0, size, size);
+                icon.draw(canvas);
+            }
+            // Cut off the icon's own rim and rounded corners: the card takes its background color around it.
+            if (cutRim) {
+                int cut = Math.round(size * 0.1f);
+                b = Bitmap.createBitmap(b, cut, cut, size - 2 * cut, size - 2 * cut);
+            }
+            b.setHasMipMap(true);
+        } catch (PackageManager.NameNotFoundException | RuntimeException e) {
+            b = null;
+        }
+        synchronized (LOGOS) {
+            LOGOS.put(key, b);
+        }
+        return b;
+    }
+
+    /** The icon's background along its top (or bottom) edge: the average of points there (0 if they're transparent). */
+    private static int edgeColor(Bitmap b, boolean top) {
+        int w = b.getWidth(), h = b.getHeight(), r = 0, g = 0, bl = 0, n = 0;
+        int e = 2, y = top ? e : h - 1 - e;     // the icon is already cut inside its rim: its very edge is its background
+        int[][] pts = {{e, y}, {w / 4, y}, {w / 2, y}, {3 * w / 4, y}, {w - 1 - e, y}};
+        for (int[] p : pts) {
+            int px = b.getPixel(p[0], p[1]);
+            if ((px >>> 24) < 200) return 0;
+            r += (px >> 16) & 255;
+            g += (px >> 8) & 255;
+            bl += px & 255;
+            n++;
+        }
+        return 0xFF000000 | ((r / n) << 16) | ((g / n) << 8) | (bl / n);
+    }
+
+    /** Icon-only apps in All Apps: the icon on a card that continues its own background (as on the shelf). */
+    private static synchronized Bitmap iconCard(Context c, String pkg) {
+        String key = "iconcard:" + pkg;
+        if (TILES.containsKey(key)) return TILES.get(key);
+        Bitmap icon = iconLogo(c, pkg, true);
+        if (icon == null) return null;
+        int top = edgeColor(icon, true), bottom = edgeColor(icon, false);
+        if (top == 0 || bottom == 0) return null;
+        Bitmap b = Bitmap.createBitmap(TILE_W, TILE_H, Bitmap.Config.ARGB_8888);
+        Canvas canvas = new Canvas(b);
+        float ih = TILE_H * 0.62f, iw = ih * icon.getWidth() / icon.getHeight();
+        float y0 = (TILE_H - ih) / 2, x0 = (TILE_W - iw) / 2;
+        Paint bg = new Paint();
+        bg.setShader(new LinearGradient(0, y0, 0, y0 + ih, top, bottom, Shader.TileMode.CLAMP));
+        canvas.drawRect(0, 0, TILE_W, TILE_H, bg);
+        canvas.drawBitmap(icon, null, new RectF(x0, y0, x0 + iw, y0 + ih), new Paint(Paint.ANTI_ALIAS_FLAG | Paint.FILTER_BITMAP_FLAG));
+        b.setHasMipMap(true);
+        TILES.put(key, b);
+        return b;
+    }
+
+    /**
+     * "App logo" for icon-only apps: the icon without its own square, only what's drawn on it, so it sits on Lume's
+     * card like the other logos. Its background (top-to-bottom, gradients too) is removed and the edges cleaned.
+     */
+    private static Bitmap iconGlyph(Context c, String pkg) {
+        synchronized (LOGOS) {
+            if (LOGOS.containsKey("glyph:" + pkg)) return LOGOS.get("glyph:" + pkg);
+        }
+        Bitmap out = null;
+        Bitmap icon = iconLogo(c, pkg, true);
+        if (icon != null) {
+            int top = edgeColor(icon, true), bottom = edgeColor(icon, false);
+            if (top != 0 && bottom != 0) {
+                int w = icon.getWidth(), h = icon.getHeight();
+                int[] px = new int[w * h];
+                icon.getPixels(px, 0, w, 0, 0, w, h);
+                float[] bg = new float[3], col = new float[3];
+                for (int y = 0; y < h; y++) {
+                    float v = (float) y / (h - 1);
+                    for (int i = 0; i < 3; i++) {
+                        int sh = 16 - 8 * i;
+                        bg[i] = (((top >> sh) & 255) * (1 - v) + ((bottom >> sh) & 255) * v) / 255f;
+                    }
+                    for (int x = 0; x < w; x++) {
+                        int p = px[y * w + x];
+                        for (int i = 0; i < 3; i++) col[i] = ((p >> (16 - 8 * i)) & 255) / 255f;
+                        float d = (float) Math.sqrt(((col[0] - bg[0]) * (col[0] - bg[0]) + (col[1] - bg[1]) * (col[1] - bg[1])
+                                + (col[2] - bg[2]) * (col[2] - bg[2])) / 3);
+                        float a = smoothstep(0.1f, 0.3f, d) * ((p >>> 24) / 255f);
+                        if (a <= 0.004f) {
+                            px[y * w + x] = 0;
+                            continue;
+                        }
+                        for (int i = 0; i < 3; i++) col[i] = clamp((col[i] - (1 - a) * bg[i]) / a);
+                        px[y * w + x] = (Math.round(a * 255) << 24) | (Math.round(col[0] * 255) << 16)
+                                | (Math.round(col[1] * 255) << 8) | Math.round(col[2] * 255);
+                    }
+                }
+                // Choke the edge by a pixel: no dark rim left from the icon's own outline around the drawing.
+                int[] alpha = new int[w * h];
+                for (int i = 0; i < px.length; i++) alpha[i] = px[i] >>> 24;
+                for (int y = 1; y < h - 1; y++) {
+                    for (int x = 1; x < w - 1; x++) {
+                        int i = y * w + x, m = Math.min(Math.min(alpha[i - 1], alpha[i + 1]), Math.min(alpha[i - w], alpha[i + w]));
+                        if (m < alpha[i]) px[i] = (m << 24) | (px[i] & 0xFFFFFF);
+                    }
+                }
+                out = trimLogo(Bitmap.createBitmap(px, w, h, Bitmap.Config.ARGB_8888));
+                if (out != null) out.setHasMipMap(true);
+            }
+        }
+        if (out == null) out = iconLogo(c, pkg, false);
+        synchronized (LOGOS) {
+            LOGOS.put("glyph:" + pkg, out);
+        }
+        return out;
+    }
+
+    /** The app's TV art as the card (or its icon on a dark card without art), cached. */
+    private static synchronized Bitmap artTile(Context c, String pkg) {
+        String key = "art:" + pkg;
+        if (TILES.containsKey(key)) return TILES.get(key);
+        Bitmap t = bannerTile(c, pkg);
+        if (t == null) t = iconTile(c, pkg);
+        t.setHasMipMap(true);
+        TILES.put(key, t);
+        return t;
+    }
+
     /** The logo for a light tile: its white and light gray parts turn dark; its colors stay. Made once per logo. */
     private static Bitmap onLight(String key, Bitmap logo) {
         synchronized (LOGOS) {
@@ -163,7 +366,17 @@ final class HomeApps {
                 int r = (p >> 16) & 255, g = (p >> 8) & 255, bl = p & 255;
                 int max = Math.max(r, Math.max(g, bl)), min = Math.min(r, Math.min(g, bl));
                 float sat = max == 0 ? 0 : (max - min) / (float) max;
-                if (sat < 0.22f && max > 150) px[i] = (a << 24) | 0x1D1D1F;
+                if (sat < 0.22f && max > 150) {
+                    px[i] = (a << 24) | 0x1D1D1F;
+                } else {
+                    // Bright colors (ashtv's light lime, YouCine's yellow) fade on the light tile: the same hue,
+                    // deeper, so they stand out like the other logos.
+                    float lum = (0.2126f * r + 0.7152f * g + 0.0722f * bl) / 255f;
+                    float f = min > 110 ? 0.42f : lum > 0.6f ? 0.42f / lum : 1f;
+                    // Pale ones darken evenly; bright yellows keep more red, so they turn amber, not olive.
+                    float fr = min > 110 ? f : Math.min(1f, f * 1.45f);
+                    if (f < 1f) px[i] = (a << 24) | (Math.round(r * fr) << 16) | (Math.round(g * f) << 8) | Math.round(bl * f);
+                }
             }
             b.setPixels(px, 0, w, 0, 0, w, h);
             b.setHasMipMap(true);
@@ -303,7 +516,6 @@ final class HomeApps {
     /** Shortcuts in the bottom drawer. */
     static List<Item> drawerShortcuts() {
         List<Item> items = new ArrayList<>();
-        items.add(shortcut(ALL_APPS, "all", Ui.tr("Todos os Apps", "All Apps"), "apps"));
         items.add(shortcut(SETTINGS, "settings", Ui.tr("Ajustes do Início", "Home Settings"), "settings"));
         items.add(shortcut(ANDROID_SETTINGS, "tv-settings", Ui.tr("Ajustes da TV", "TV Settings"), "tv_settings"));
         return items;
@@ -397,7 +609,8 @@ final class HomeApps {
             it.pkg = pkg;
             it.key = pkg;
             it.label = String.valueOf(ri.loadLabel(pm));
-            it.tile = appTile(c, null, pkg, 0);
+            it.tile = iconOnly(pkg, it.label) ? iconCard(c, pkg) : appTile(c, null, pkg, 0);
+            if (it.tile == null) it.tile = appTile(c, null, pkg, 0);
             it.inDock = dock.contains(pkg);
             items.add(it);
         }

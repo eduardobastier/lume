@@ -80,6 +80,7 @@ final class Diagnostics {
         b.append("accessibility services: ").append(android.provider.Settings.Secure.getString(c.getContentResolver(),
                 android.provider.Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES)).append('\n');
         b.append("home button service on: ").append(HomeButton.enabled(c)).append('\n');
+        b.append("can write secure settings: ").append(HomeButton.canWriteSettings(c)).append('\n');
         for (android.content.pm.ResolveInfo r : c.getPackageManager().queryIntentActivities(new android.content.Intent(
                 android.content.Intent.ACTION_MAIN).addCategory(android.content.Intent.CATEGORY_HOME), 0)) {
             b.append("home screen: ").append(r.activityInfo.packageName).append('/').append(r.activityInfo.name).append('\n');

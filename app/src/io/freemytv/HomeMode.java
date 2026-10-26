@@ -93,7 +93,19 @@ final class HomeMode {
     }
 
     /** After the TV boots (and after a TV update): wait for the system to settle and check Lume mode. */
+    /** Clears the switch's error message (Fire TV: the Home button got turned on afterwards). */
+    static void clearError(Context c) {
+        JSONObject s = state(c);
+        if (s.optString("error").isEmpty()) return;
+        try {
+            s.put("error", "");
+        } catch (JSONException ignored) {}
+        save(c, s);
+    }
+
     static void bootCheck(Context c) {
+        HomeButton.selfEnable(c);
+        HomeButton.scheduleWatch(c);
         ModeJob.schedule(c, ModeJob.VERIFY, null, 45_000);
     }
 
@@ -384,7 +396,7 @@ final class HomeMode {
 
     /**
      * Fire TV (the app never uses its ADB): the mode only switches HomeButton on or off (it acts in Lume mode
-     * alone), which is turned on once with HomeButton.ENABLE_COMMAND. Nothing is turned off, and the screensaver is ours
+     * alone). With the permission ENABLE_COMMAND gives once, the app turns the service on by itself. Nothing is turned off, and the screensaver is ours
      * through IdleSaver. Original: Amazon's home screen is back right away, the service just stays idle.
      */
     private static void switchWithoutAdb(Context c, String mode) {
@@ -394,14 +406,16 @@ final class HomeMode {
             save(c, s);
         } catch (JSONException ignored) {}
         if (FREE.equals(mode)) {
-            if (HomeButton.enabled(c)) {
+            HomeButton.scheduleWatch(c);
+            if (HomeButton.selfEnable(c)) {
                 notice(c, Ui.tr("Lume ligado: o botão Home abre o novo Início.", "Lume is on: Home opens the new home screen."));
                 done(c, null);
             } else {
                 // Fire OS doesn't list other apps' services in Accessibility: it takes one command from an ADB app
                 // (ATV Tools) or a computer. Shown as the switch's message until it's done.
-                done(c, Ui.tr("Falta ativar o botão Home: rode no ATV Tools (ou no computador) ",
-                        "One step left for the Home button: run in ATV Tools (or from a computer) ") + HomeButton.ENABLE_COMMAND);
+                done(c, Ui.tr("Falta um passo para o botão Home (uma vez só): rode no ATV Tools ",
+                        "One step left for the Home button (once): run in ATV Tools ") + HomeButton.ENABLE_COMMAND
+                        + Ui.tr(" e abra o Lume de novo.", " and open Lume again."));
             }
         } else {
             notice(c, Ui.tr("Modo original: o Início da Amazon está de volta.", "Original mode: Amazon's home screen is back."));

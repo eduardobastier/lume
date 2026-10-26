@@ -129,6 +129,11 @@ final class Prefs {
         return ui(c).getBoolean("weather_right", false);
     }
 
+    /** Shelf icons: false = each app's logo on Lume's tile (default); true = the app's own TV art, untouched. */
+    static boolean shelfArt(Context c) {
+        return ui(c).getBoolean("shelf_art", false);
+    }
+
     static boolean showWeather(Context c) {
         return ui(c).getBoolean("weather", true);
     }
