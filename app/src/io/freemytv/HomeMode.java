@@ -33,10 +33,12 @@ import java.util.regex.Pattern;
 final class HomeMode {
     private HomeMode() {}
 
-    static final String PKG = "io.freemytv";
-    static final String HOME_ACTIVITY = PKG + "/" + PKG + ".HomeActivity";
-    static final String SETTINGS_ACTIVITY = PKG + "/" + PKG + ".SettingsActivity";
-    static final String DREAM = PKG + "/" + PKG + ".Screensaver";
+    /** The app's id on the TV (build.sh renames it from the manifest's io.freemytv; the code stays in io.freemytv). */
+    static final String PKG = "com.eduardobastier.lume";
+    static final String CODE = "io.freemytv";
+    static final String HOME_ACTIVITY = PKG + "/" + CODE + ".HomeActivity";
+    static final String SETTINGS_ACTIVITY = PKG + "/" + CODE + ".SettingsActivity";
+    static final String DREAM = PKG + "/" + CODE + ".Screensaver";
     static final String FREE = "free", ORIGINAL = "original";
 
     /** Google TV's home screen: the fallback when the TV's own one wasn't recorded. */

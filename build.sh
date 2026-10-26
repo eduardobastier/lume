@@ -54,8 +54,8 @@ final class Config {
     static final String TMDB_KEY = "$(prop tmdb_key '')";
     static final String YOUTUBE_KEY = "$(prop youtube_key '')";
     static final String RECS_GENRES = "$(prop recs_genres '')";
-    static final String UPDATE_REPO = "$(prop update_repo eduardobastier/my-tv)";
-    static final String WALLPAPER_REPO = "$(prop wallpaper_repo eduardobastier/my-tv-wallpapers)";
+    static final String UPDATE_REPO = "$(prop update_repo eduardobastier/lume)";
+    static final String WALLPAPER_REPO = "$(prop wallpaper_repo eduardobastier/lume-wallpapers)";
     static final String WALLPAPER_PATH = "$(prop wallpaper_path wallpapers)";
     static final String TMDB_REGION = "$(prop tmdb_region US)";
     static final String TELEGRAM_TOKEN = "$(prop telegram_bot_token '')";
@@ -77,6 +77,7 @@ EOF
 "$BT/aapt2" compile --dir app/res -o out/res.zip
 # Fonts uncompressed: Android reads them straight from the APK.
 "$BT/aapt2" link -o out/base.apk -I "$AJ" --manifest app/AndroidManifest.xml --java out/gen out/res.zip \
+  --rename-manifest-package com.eduardobastier.lume \
   --min-sdk-version 28 --target-sdk-version 33 -A app/assets -0 ttf
 "$JAVAC" -nowarn -Xlint:-options -source 8 -target 8 -bootclasspath "$AJ:$BT/core-lambda-stubs.jar" -classpath "$AJ" \
   -d out/classes $(find app/src out/gen -name '*.java')

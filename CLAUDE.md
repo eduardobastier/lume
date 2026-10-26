@@ -77,7 +77,7 @@ TVs that don't run Google TV or Android TV (Samsung, LG and others): the way is 
 - Settings come from `config.properties` through the generated `out/gen/io/freemytv/Config.java` (never edit that).
 - After any change, `./build.sh` must end with `Built Lume.apk`.
 
-## Branches (eduardobastier/my-tv)
+## Branches (eduardobastier/lume)
 
 - Work happens on `dev`; commit and push there.
 - `main` is for releases only: merge `dev` into `main` when publishing a version (bump versionCode/versionName,

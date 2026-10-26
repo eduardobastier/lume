@@ -26,7 +26,7 @@ import android.view.accessibility.AccessibilityEvent;
  */
 public class HomeButton extends AccessibilityService {
     static final String AMAZON_HOME = "com.amazon.tv.launcher";
-    static final String COMPONENT = HomeMode.PKG + "/" + HomeMode.PKG + ".HomeButton";
+    static final String COMPONENT = HomeMode.PKG + "/" + HomeMode.CODE + ".HomeButton";
     private static final long IDLE_MS = 4 * 60_000L;
     private final Handler handler = new Handler(Looper.getMainLooper());
     private long lastKey = SystemClock.uptimeMillis();
