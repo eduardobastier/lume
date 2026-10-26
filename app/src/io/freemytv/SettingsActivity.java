@@ -413,7 +413,7 @@ public class SettingsActivity extends Activity {
         }
 
         private int rowCount() {
-            return screen == MAIN ? MAIN_ROWS : screen == RECS ? 5 : screen == THEME ? 3 : screen == WEATHER ? 4 : screen == WALL ? 5
+            return screen == MAIN ? MAIN_ROWS : screen == RECS ? 5 : screen == THEME ? 3 : screen == WEATHER ? 4 : screen == WALL ? 4
                     : screen == UPDATE ? updateRows() : screen == HOMESCR ? 6 : screen == SAVER ? 3 : 2;
         }
 
@@ -619,7 +619,7 @@ public class SettingsActivity extends Activity {
         private void drawWallScreen(Canvas c) {
             Context ctx = getContext();
             int n = Wallpapers.names(ctx).size();
-            String[] labels = {Ui.tr("Fonte", "Source"), Ui.tr("Imagens", "Images"), Ui.tr("Imagens na troca", "Images that rotate"),
+            String[] labels = {Ui.tr("Fonte", "Source"), Ui.tr("Imagens na troca", "Images that rotate"),
                     Ui.tr("Modo claro", "Light mode"),
                     Ui.tr("Modo escuro", "Dark mode")};
             String count = wpSyncing ? Ui.tr("Sincronizando…", "Syncing…") : !wpStatus.isEmpty() ? wpStatus
@@ -628,8 +628,8 @@ public class SettingsActivity extends Activity {
             int rotating = Wallpapers.rotation(ctx, all).size();
             String inRotation = all.isEmpty() ? "—" : rotating == all.size() ? Ui.tr("Todas", "All")
                     : rotating + Ui.tr(" de ", " of ") + all.size();
-            String[] values = {Wallpapers.sourceName(ctx), count, inRotation, wallName(Prefs.WP_LIGHT), wallName(Prefs.WP_DARK)};
-            for (int i = 0; i < 5; i++) {
+            String[] values = {Wallpapers.sourceName(ctx), inRotation, wallName(Prefs.WP_LIGHT), wallName(Prefs.WP_DARK)};
+            for (int i = 0; i < 4; i++) {
                 float y = (LIST_TOP + 20 + i * (ROW_H + ROW_GAP)) * k;
                 rowRect.set(LIST_X * k, y, LIST_R * k, y + ROW_H * k);
                 float f = drawRowBackground(c, i);
@@ -641,9 +641,11 @@ public class SettingsActivity extends Activity {
             Paint hint = Ui.text(Ui.regular, 23 * k, fg(0x8CFFFFFF));
             String note = Ui.tr("Baixadas na TV (até 12), nada vem dentro do app. Atualiza a cada 3 h.",
                     "Downloaded on the TV (up to 12); none come with the app. Refreshed every 3 h.");
-            c.drawText(note, LIST_X * k + 30 * k, (LIST_TOP + 20 + 5 * (ROW_H + ROW_GAP) + 40) * k, hint);
-            String more = Ui.tr("OK em Imagens sincroniza agora.", "OK on Images syncs now.");
-            c.drawText(more, LIST_X * k + 30 * k, (LIST_TOP + 20 + 5 * (ROW_H + ROW_GAP) + 80) * k, hint);
+            c.drawText(note, LIST_X * k + 30 * k, (LIST_TOP + 20 + 4 * (ROW_H + ROW_GAP) + 40) * k, hint);
+            String more = wpSyncing ? Ui.tr("Baixando as imagens da fonte…", "Downloading the source's images…")
+                    : (n == 0 ? (wpStatus.isEmpty() ? Ui.tr("Nenhuma imagem ainda", "No images yet") : Ui.tr("Nada encontrado nessa fonte", "Nothing found at this source")) : n + Ui.tr(n == 1 ? " imagem na TV" : " imagens na TV", n == 1 ? " image on the TV" : " images on the TV"))
+                    + Ui.tr(" · trocar a fonte baixa as novas.", " · changing the source downloads new ones.");
+            c.drawText(more, LIST_X * k + 30 * k, (LIST_TOP + 20 + 4 * (ROW_H + ROW_GAP) + 80) * k, hint);
         }
 
         private void syncWallpapers() {
@@ -1590,8 +1592,7 @@ public class SettingsActivity extends Activity {
                 }
             } else if (screen == WALL) {
                 if (focus == 0) openPopup(WP_SOURCE_POPUP);
-                else if (focus == 1) syncWallpapers();
-                else if (focus == 2) {
+                else if (focus == 1) {
                     if (Wallpapers.names(c).isEmpty()) {
                         syncWallpapers();
                     } else {
@@ -1599,7 +1600,7 @@ public class SettingsActivity extends Activity {
                         loadWpThumbs();
                     }
                 } else {
-                    wpSlot = focus == 3 ? Prefs.WP_LIGHT : Prefs.WP_DARK;
+                    wpSlot = focus == 2 ? Prefs.WP_LIGHT : Prefs.WP_DARK;
                     openPopup(WP_MODE_POPUP);
                 }
             } else if (screen == RECS) {
