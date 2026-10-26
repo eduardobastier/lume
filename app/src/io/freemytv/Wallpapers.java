@@ -43,6 +43,31 @@ final class Wallpapers {
         return true;
     }
 
+    /** Whether the GitHub folder (config.properties) was found with images, the last time it was checked. */
+    static boolean githubHasImages(Context c) {
+        return !Config.WALLPAPER_REPO.isEmpty()
+                && c.getSharedPreferences("wallpapers", Context.MODE_MULTI_PROCESS).getBoolean("github_ok", false);
+    }
+
+    /** In the background, at most every 6 h (or `force`): looks for images in the GitHub folder; `done` after. */
+    static void checkGithub(Context c, boolean force, Runnable done) {
+        if (Config.WALLPAPER_REPO.isEmpty()) return;
+        final Context app = c.getApplicationContext();
+        SharedPreferences sp = app.getSharedPreferences("wallpapers", Context.MODE_MULTI_PROCESS);
+        long now = System.currentTimeMillis(), last = sp.getLong("github_checked", 0);
+        if (!force && now - last < 6 * 3600_000L && now >= last) return;
+        new Thread(() -> {
+            boolean ok;
+            try {
+                ok = !list(app, "github").isEmpty();
+            } catch (IOException | RuntimeException e) {
+                ok = false;
+            }
+            sp.edit().putBoolean("github_ok", ok).putLong("github_checked", System.currentTimeMillis()).apply();
+            if (done != null) done.run();
+        }, "wallpapers-github").start();
+    }
+
     /** The source in words, for Home Settings. */
     static String sourceName(Context c) {
         String s = Prefs.wallpaperSource(c);

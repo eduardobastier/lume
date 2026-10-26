@@ -688,7 +688,7 @@ public class SettingsActivity extends Activity {
             out.add(Ui.tr("Bing: imagens do dia", "Bing: images of the day"));
             out.add(Ui.tr("Wallhaven: mais populares", "Wallhaven: most popular"));
             out.add(Ui.tr("Wallhaven: buscar…", "Wallhaven: search…"));
-            if (!Config.WALLPAPER_REPO.isEmpty()) out.add("GitHub: " + Config.WALLPAPER_REPO);
+            if (Wallpapers.githubHasImages(getContext())) out.add("GitHub: " + Config.WALLPAPER_REPO);
             return out.toArray(new String[0]);
         }
 
@@ -1591,8 +1591,10 @@ public class SettingsActivity extends Activity {
                     openPopup(WP_MODE_POPUP);
                 }
             } else if (screen == WALL) {
-                if (focus == 0) openPopup(WP_SOURCE_POPUP);
-                else if (focus == 1) {
+                if (focus == 0) {
+                    openPopup(WP_SOURCE_POPUP);
+                    Wallpapers.checkGithub(c, false, () -> handler.post(this::invalidate));
+                } else if (focus == 1) {
                     if (Wallpapers.names(c).isEmpty()) {
                         syncWallpapers();
                     } else {
@@ -1618,6 +1620,7 @@ public class SettingsActivity extends Activity {
                         open(RECS, 0);
                     } else {
                         open(WALL, 0);
+                        Wallpapers.checkGithub(c, false, () -> handler.post(this::invalidate));
                         if (Wallpapers.names(c).isEmpty()) syncWallpapers();
                     }
                 } else if (focus == 3) open(WEATHER, 0);
