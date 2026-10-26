@@ -1360,13 +1360,23 @@ public class SettingsActivity extends Activity {
         }
 
         private String saverName() {
-            return Ui.tr("Após ", "After ") + minutes(saverMinutes());
+            return Ui.tr("Após ", "After ") + saverWait();
+        }
+
+        /**
+         * How long the TV waits: on Fire TV, Lume's own screensaver (HomeButton) after 4 min, whatever the system says;
+         * elsewhere the system's timeout ("never" when it's set to the maximum, as some boxes and Fire OS do).
+         */
+        private String saverWait() {
+            if (HomeButton.fireTv()) return minutes(4);
+            int m = saverMinutes();
+            return m > 24 * 60 ? Ui.tr("nunca", "never") : minutes(m);
         }
 
         /** Screensaver: preview it, and how long the TV waits before it starts. */
         private void drawSaverScreen(Canvas c) {
             String[] labels = {Ui.tr("Ver agora", "Preview"), Ui.tr("Começar após", "Start after"), Ui.tr("Imagem", "Image")};
-            String[] values = {"", minutes(saverMinutes()) + Ui.tr(" sem usar o controle", " without using the remote"),
+            String[] values = {"", saverWait() + Ui.tr(" sem usar o controle", " without using the remote"),
                     Prefs.recsOn(getContext()) ? Ui.tr("Fotos das recomendações", "The recommendations' photos") : wallName(Prefs.WP_SAVER)};
             for (int i = 0; i < 3; i++) {
                 layoutRow(i);
@@ -1378,7 +1388,10 @@ public class SettingsActivity extends Activity {
             }
             int sleep = android.provider.Settings.Secure.getInt(getContext().getContentResolver(), "sleep_timeout", -1);
             Paint hint = Ui.text(Ui.regular, 23 * k, fg(0x8CFFFFFF));
-            String note = sleep > 0 && sleep <= saverMinutes() * 60_000
+            String note = HomeButton.fireTv()
+                    ? Ui.tr("No Fire TV, o Lume mostra a tela de descanso dele após 4 min sem usar o controle.",
+                            "On Fire TV, Lume shows its screensaver after 4 min without using the remote.")
+                    : sleep > 0 && sleep <= saverMinutes() * 60_000
                     ? Ui.tr("A TV desliga antes (Ajustes da TV → Energia): a tela de descanso não chega a aparecer.",
                             "The TV turns off first (TV Settings → Power): the screensaver won't show.")
                     : Ui.tr("Vale para a TV toda, como nos Ajustes da TV.", "Applies to the whole TV, like TV Settings.");
@@ -2122,7 +2135,7 @@ public class SettingsActivity extends Activity {
                     pause();
                     activity.showPreview();
                 } else if (focus == 1) {
-                    openPopup(SAVER_POPUP);
+                    if (!HomeButton.fireTv()) openPopup(SAVER_POPUP);     // Fire TV: fixed (Lume's own timer)
                 } else {
                     wpSlot = Prefs.WP_SAVER;
                     if (Wallpapers.names(c).isEmpty()) syncWallpapers();
