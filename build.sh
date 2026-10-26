@@ -91,4 +91,6 @@ if [ ! -f freemytv.keystore ]; then
     -storepass freemytv -keypass freemytv -dname "CN=Lume" >/dev/null 2>&1
 fi
 "$BT/apksigner" sign --ks freemytv.keystore --ks-pass pass:freemytv --key-pass pass:freemytv --out Lume.apk out/aligned.apk
+VER="$(grep -o 'versionName="[^"]*"' app/AndroidManifest.xml | cut -d\" -f2)"
+cp Lume.apk "Lume_v$VER.apk"
 echo "Built Lume.apk ($(du -h Lume.apk | cut -f1)). Install: adb install -r Lume.apk"
