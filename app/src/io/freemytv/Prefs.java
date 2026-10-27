@@ -126,7 +126,7 @@ final class Prefs {
 
     /** The weather pill at the top: true = right, next to the clock; false = in the middle. */
     static boolean weatherRight(Context c) {
-        return ui(c).getBoolean("weather_right", false);
+        return ui(c).getBoolean("weather_right", true);
     }
 
     /** Shelf icons: false = each app's logo on Lume's tile (default); true = the app's own TV art, untouched. */
@@ -181,6 +181,43 @@ final class Prefs {
 
     static boolean anyService(Context c) {
         return ui(c).getBoolean("recs_all", Config.RECS_ALL);
+    }
+
+    /** Dock size: 0 large (default), 1 medium, 2 small. */
+    static int dockSize(Context c) {
+        return ui(c).getInt("dock_size", 0);
+    }
+
+    static void setDockSize(Context c, int size) {
+        ui(c).edit().putInt("dock_size", size).apply();
+    }
+
+    /** How much the dock shrinks for its size. */
+    static float dockScale(Context c) {
+        int size = dockSize(c);
+        return size == 2 ? 0.68f : size == 1 ? 0.84f : 1f;
+    }
+
+    /** Outlines and backgrounds, each on its own: the top's pills and buttons, the dock, the panel below. */
+    static boolean topBorders(Context c) {
+        return ui(c).getBoolean("border_top", ui(c).getBoolean("borders", false));
+    }
+
+    static boolean topBackground(Context c) {
+        return ui(c).getBoolean("bg_top", true);
+    }
+
+    static boolean dockBorders(Context c) {
+        return ui(c).getBoolean("border_dock", ui(c).getBoolean("borders", false));
+    }
+
+    /** The glass bar behind the dock's apps (off: just the apps). */
+    static boolean dockBackground(Context c) {
+        return ui(c).getBoolean("dock_bg", true);
+    }
+
+    static boolean panelBorders(Context c) {
+        return ui(c).getBoolean("border_panel", ui(c).getBoolean("borders", false));
     }
 
     static void set(Context c, String key, boolean value) {

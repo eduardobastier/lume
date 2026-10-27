@@ -125,6 +125,7 @@ public class HomeButton extends AccessibilityService {
     @Override protected boolean onKeyEvent(KeyEvent e) {
         lastKey = SystemClock.uptimeMillis();
         if (e.getKeyCode() != KeyEvent.KEYCODE_HOME || !free()) return false;
+        settingsFlag(this).delete();
         if (e.getAction() == KeyEvent.ACTION_UP && !e.isCanceled()) openHome();
         return true;
     }
@@ -133,14 +134,37 @@ public class HomeButton extends AccessibilityService {
         if (e.getEventType() != AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) return;
         if (e.getPackageName() != null && e.getPackageName().toString().equals(getPackageName())) {
             hideCover();     // Lume's home screen is up: the cover can go
+            settingsFlag(this).delete();
             return;
         }
-        if (e.getPackageName() == null || !amazonHome(e.getPackageName().toString())) return;
+        if (e.getPackageName() == null) return;
+        String pkg = e.getPackageName().toString();
+        if (!pkg.startsWith("com.amazon") && !pkg.equals("android") && !pkg.equals("com.android.systemui")) {
+            settingsFlag(this).delete();     // left the settings for an app
+        }
+        if (!amazonHome(pkg)) return;
         // Amazon's launcher also hosts Fire OS's settings (MainSettingsActivity...): only its home screen counts.
         CharSequence cls = e.getClassName();
         if (cls == null || !cls.toString().contains("HomeActivity")) return;
+        // Fire OS 7 shows its settings as a tab of that same home screen: left alone when Lume opened them.
+        if (settingsFlag(this).exists()) {
+            AppLog.w("home button: Amazon's screen showed up while in Fire settings: left alone");
+            return;
+        }
         AppLog.w("home button: Amazon's home screen showed up (" + e.getClassName() + "), free=" + free());
         if (free()) openHome();
+    }
+
+    /** Present while Fire's settings (opened from Lume) are up; cleared by Home or by Lume's screen. */
+    private static java.io.File settingsFlag(Context c) {
+        return new java.io.File(c.getFilesDir(), "fire_settings_open");
+    }
+
+    /** Opens the TV's settings. On Fire, first tells the Home service not to send Amazon's screen back to Lume. */
+    static void openTvSettings(Context c) {
+        if (fireTv()) {
+            try { settingsFlag(c).createNewFile(); } catch (java.io.IOException ignored) { }
+        }
     }
 
     /** Amazon's home screen: the known package, or whatever the system opens for Home on this model. */

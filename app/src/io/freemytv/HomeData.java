@@ -30,7 +30,6 @@ import java.util.concurrent.Executors;
  */
 final class HomeData {
     static final String[] COINS = {"BTC", "ETH", "SOL", "USDT"};
-    static final String[] COIN_NAMES = {"Bitcoin", "Ethereum", "Solana", "Dollar"};
     private static final String CURRENCY = Config.CURRENCY.trim().toUpperCase(Locale.ROOT);
     /** Binance quotes dollars as USDT. */
     private static final String QUOTE = CURRENCY.equals("USD") ? "USDT" : CURRENCY;
@@ -45,8 +44,8 @@ final class HomeData {
         return "https://api.open-meteo.com/v1/forecast?latitude=" + lat + "&longitude=" + lon + WEATHER_QUERY;
     }
 
-    private static final String WEATHER_QUERY = "&current=temperature_2m,weather_code,is_day&daily=temperature_2m_max,temperature_2m_min,sunrise,sunset"
-            + "&hourly=temperature_2m,weather_code,is_day&timezone=auto&forecast_days=2";
+    private static final String WEATHER_QUERY = "&current=temperature_2m,weather_code,is_day&daily=temperature_2m_max,temperature_2m_min,sunrise,sunset,weather_code"
+            + "&hourly=temperature_2m,weather_code,is_day&timezone=auto&forecast_days=4";
     private static final long PRICES_EVERY = 5 * 60_000L, WEATHER_EVERY = 30 * 60_000L;
     private static final Locale PT = new Locale("pt", "BR");
 
@@ -56,10 +55,6 @@ final class HomeData {
     static int coinCount() {
         if (!Config.SHOW_PRICES) return 0;
         return CURRENCY.equals("BRL") ? COINS.length : 3;
-    }
-
-    static String coinName(int i) {
-        return i == 3 ? Ui.tr("Dólar", "Dollar") : COIN_NAMES[i];
     }
 
     private static String pricesUrl() {
@@ -78,6 +73,10 @@ final class HomeData {
         final List<Double> hourTemp = new ArrayList<>();
         final List<Integer> hourCode = new ArrayList<>();
         final List<Boolean> hourDay = new ArrayList<>();
+        // Next days (tomorrow on): short weekday name, low, high and code.
+        final List<String> dayName = new ArrayList<>();
+        final List<Double> dayMin = new ArrayList<>(), dayMax = new ArrayList<>();
+        final List<Integer> dayCode = new ArrayList<>();
     }
 
     private static HomeData instance;
@@ -276,6 +275,18 @@ final class HomeData {
         w.min = daily.getJSONArray("temperature_2m_min").getDouble(0);
         w.sunrise = localTime(daily.getJSONArray("sunrise").getString(0), zone);
         w.sunset = localTime(daily.getJSONArray("sunset").getString(0), zone);
+        JSONArray dates = daily.optJSONArray("time"), dayCodes = daily.optJSONArray("weather_code");
+        if (dates != null && dayCodes != null) {
+            SimpleDateFormat in = new SimpleDateFormat("yyyy-MM-dd", Locale.US);
+            SimpleDateFormat out = new SimpleDateFormat("EEE", Ui.en ? Locale.US : new Locale("pt", "BR"));
+            for (int i = 1; i < dates.length() && w.dayName.size() < 3; i++) {
+                String name = out.format(in.parse(dates.getString(i))).replace(".", "");
+                w.dayName.add(name.isEmpty() ? name : Character.toUpperCase(name.charAt(0)) + name.substring(1));
+                w.dayMin.add(daily.getJSONArray("temperature_2m_min").getDouble(i));
+                w.dayMax.add(daily.getJSONArray("temperature_2m_max").getDouble(i));
+                w.dayCode.add(dayCodes.getInt(i));
+            }
+        }
         JSONObject hourly = o.optJSONObject("hourly");
         if (hourly != null) {
             JSONArray times = hourly.getJSONArray("time");
@@ -354,13 +365,6 @@ final class HomeData {
         return String.format(locale(), "%.2f", v);
     }
 
-    /** $108,234 · $185.20 · R$ 581.234 · R$ 5,61 (cents only below a thousand), in the configured currency. */
-    static String brl(double v) {
-        String symbol = currencySymbol();
-        if (Double.isNaN(v)) return symbol + "—";
-        return v >= 1000 ? String.format(locale(), symbol + "%,.0f", v) : String.format(locale(), symbol + "%.2f", v);
-    }
-
     /** The weather in words, from Open-Meteo's WMO code. */
     static String condition(int code, boolean day) {
         if (code < 0) return "";
@@ -386,17 +390,6 @@ final class HomeData {
         if (code >= 71 && code <= 77 || code == 85 || code == 86) return "Neve";
         if (code >= 95) return "Tempestade";
         return "Chuva";
-    }
-
-    private static String currencySymbol() {
-        switch (CURRENCY) {
-            case "USD": return "$";
-            case "BRL": return "R$ ";
-            case "EUR": return "€";
-            case "GBP": return "£";
-            case "JPY": return "¥";
-            default: return CURRENCY + " ";
-        }
     }
 
     /** Celsius or Fahrenheit (config.properties "temperature": C, F, or auto = Fahrenheit in the US). */

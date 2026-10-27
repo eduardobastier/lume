@@ -239,7 +239,7 @@ public class SettingsActivity extends Activity {
         private static final int[] SAVER_MINUTES = {1, 2, 5, 10, 15, 30, 60};
         /** The popup over the list: none, the theme, the genres (several at once) or what OK on a card opens. */
         private static final int NO_POPUP = 0, THEME_POPUP = 1, GENRE_POPUP = 2, ACTION_POPUP = 3, LIVE_POPUP = 4, SAVER_POPUP = 5,
-                YES_NO_POPUP = 6, PLACE_POPUP = 7, WP_MODE_POPUP = 8, WP_PICK_POPUP = 9, WP_SOURCE_POPUP = 10, WP_ROTATE_POPUP = 11, BG_POPUP = 12, WX_POS_POPUP = 13, DOCK_POPUP = 14, ART_POPUP = 15;
+                YES_NO_POPUP = 6, PLACE_POPUP = 7, WP_MODE_POPUP = 8, WP_PICK_POPUP = 9, WP_SOURCE_POPUP = 10, WP_ROTATE_POPUP = 11, BG_POPUP = 12, WX_POS_POPUP = 13, DOCK_POPUP = 14, ART_POPUP = 15, SIZE_POPUP = 16;
         /** The on/off choice the Yes/No popup is for: its Prefs key and title. */
         private String yesNoKey = "", yesNoTitle = "";
         /** Live TV choices: [value, name], built when the popup opens (the TV's inputs and installed apps). */
@@ -253,7 +253,7 @@ public class SettingsActivity extends Activity {
         private final Scene scene = new Scene();
         private Click click;
         private final Handler handler = new Handler(Looper.getMainLooper());
-        private final Spring[] pop = new Spring[10];
+        private final Spring[] pop = new Spring[16];     // one per row: room for the longest list (Tela inicial has 13)
         private final RectF tmp = new RectF(), rowRect = new RectF();
         private JSONObject state = new JSONObject(), recs = new JSONObject();
         private boolean hasKey;
@@ -391,21 +391,6 @@ public class SettingsActivity extends Activity {
             }
         }
 
-        /** The app's icon, big, in a rounded square (Apple TV shows the section's icon on the left). */
-        private void drawIcon(Canvas c, float cx, float cy, float size) {
-            tmp.set(cx - size / 2, cy - size / 2, cx + size / 2, cy + size / 2);
-            float r = size * 0.22f;
-            tmp.offset(0, 14 * k);
-            shadow.setColor(light ? 0x33000000 : 0x66000000);
-            c.drawRoundRect(tmp, r, r, shadow);
-            tmp.offset(0, -14 * k);
-            Paint icon = new Paint(Paint.ANTI_ALIAS_FLAG);
-            icon.setShader(new android.graphics.LinearGradient(0, tmp.top, 0, tmp.bottom, 0xFF5E5CE6, 0xFF0A84FF,
-                    android.graphics.Shader.TileMode.CLAMP));
-            c.drawRoundRect(tmp, r, r, icon);
-            Symbols.draw(getContext(), c, "lume", cx, cy, size * 0.52f, 0xFFFFFFFF);
-        }
-
         private String screenTitle() {
             if (screen == RECS) return Ui.tr("Recomendações", "Recommendations");
             if (screen == THEME) return Ui.tr("Tema", "Theme");
@@ -415,7 +400,7 @@ public class SettingsActivity extends Activity {
             if (screen == UPDATE) return Ui.tr("Sistema", "System");
             if (screen == HOMESCR) return Ui.tr("Tela Inicial", "Home Screen");
             if (screen == WALL) return Ui.tr("Papel de Parede", "Wallpaper");
-            return Ui.tr("Ajustes do Início", "Home Settings");
+            return Ui.tr("Ajustes do Lume", "Lume Settings");
         }
 
         private boolean busy() {
@@ -428,7 +413,7 @@ public class SettingsActivity extends Activity {
 
         private int rowCount() {
             return screen == MAIN ? MAIN_ROWS : screen == RECS ? 5 : screen == THEME ? 3 : screen == WEATHER ? 4 : screen == WALL ? 4
-                    : screen == UPDATE ? updateRows() : screen == HOMESCR ? 7 : screen == SAVER ? 3 : 2;
+                    : screen == UPDATE ? updateRows() : screen == HOMESCR ? 13 : screen == SAVER ? 3 : 2;
         }
 
         @Override protected void onDraw(Canvas c) {
@@ -481,6 +466,11 @@ public class SettingsActivity extends Activity {
                 drawChoicePage(c, dt);
                 return;
             }
+            // A list longer than the screen lives in a window: it scrolls inside it and fades out at its top and
+            // bottom edges (never cut flat, never touching the bottom of the screen).
+            boolean scrolls = listOverflows();
+            float viewTop = (LIST_TOP + 14) * k, viewBottom = (1080 - 36) * k;
+            if (scrolls) c.saveLayer(0, viewTop, getWidth(), viewBottom, null);
             if (screen != HOME_CHOICE) drawGroups(c, rowCount());
 
             if (screen == MAIN) drawMain(c, seconds);
@@ -492,6 +482,17 @@ public class SettingsActivity extends Activity {
             else if (screen == WALL) drawWallScreen(c);
             else if (screen == HOMESCR) drawHomeScreen(c);
             else drawChoice(c);
+            if (scrolls) {
+                Paint mask = new Paint();
+                mask.setXfermode(new android.graphics.PorterDuffXfermode(android.graphics.PorterDuff.Mode.DST_IN));
+                float fadeTop = (listShift() > 0 ? 56 : 0) * k, fadeBottom = 70 * k;
+                mask.setShader(new android.graphics.LinearGradient(0, viewTop, 0, viewBottom,
+                        new int[] {0x00000000, 0xFF000000, 0xFF000000, 0x00000000},
+                        new float[] {0, fadeTop / (viewBottom - viewTop), 1 - fadeBottom / (viewBottom - viewTop), 1},
+                        android.graphics.Shader.TileMode.CLAMP));
+                c.drawRect(0, viewTop, getWidth(), viewBottom, mask);
+                c.restore();
+            }
             if (popup != NO_POPUP) drawPopup(c, dt);
         }
 
@@ -553,8 +554,8 @@ public class SettingsActivity extends Activity {
 
         private static final String[] MAIN_ICONS = {"home", "tv", "bedtime", "sync"};
         private static final int[] MAIN_COLORS = {0xFF5E5CE6, 0xFF0A84FF, 0xFFBF5AF2, 0xFF30D158};
-        private static final String[] HOME_ICONS = {"clear_night", "sparkles", "apps", "tv", "cloud", "speaker", "live_tv"};
-        private static final int[] HOME_COLORS = {0xFF636366, 0xFFFF9F0A, 0xFF0A84FF, 0xFF30D158, 0xFF64D2FF, 0xFFFF375F, 0xFFFF453A};
+        private static final String[] HOME_ICONS = {"clear_night", "sparkles", "apps", "tv", "home", "sparkles", "sparkles", "sparkles", "home", "sparkles", "cloud", "speaker", "live_tv"};
+        private static final int[] HOME_COLORS = {0xFF636366, 0xFFFF9F0A, 0xFF0A84FF, 0xFF30D158, 0xFFBF5AF2, 0xFF8E8E93, 0xFF5E5CE6, 0xFF8E8E93, 0xFF5E5CE6, 0xFF8E8E93, 0xFF64D2FF, 0xFFFF375F, 0xFFFF453A};
 
         private void drawMain(Canvas c, float seconds) {
             boolean working = busy();
@@ -629,21 +630,44 @@ public class SettingsActivity extends Activity {
         /** Section titles and the rows they start at, for the screens that have them. */
         private String[] sectionTitles() {
             if (screen == MAIN) return new String[] {"LUME", Ui.tr("SISTEMA", "SYSTEM")};
-            if (screen == HOMESCR) return new String[] {Ui.tr("APARÊNCIA", "APPEARANCE"), Ui.tr("NO TOPO E NA BARRA", "TOP AND BAR")};
+            if (screen == HOMESCR) return new String[] {Ui.tr("APARÊNCIA", "APPEARANCE"), Ui.tr("BORDAS E FUNDOS", "OUTLINES AND BACKGROUNDS"),
+                    Ui.tr("NO TOPO E NO PAINEL", "TOP AND PANEL")};
             return null;
         }
 
         private int[] sectionStarts() {
             if (screen == MAIN) return new int[] {0, 3};
-            if (screen == HOMESCR) return new int[] {0, 4};
+            if (screen == HOMESCR) return new int[] {0, 5, 10};
             return new int[] {0};
         }
 
         /** Top of row i (1080p units), after the section titles above it. */
         private float rowTop(int i) {
+            return rawRowTop(i) - listShift();
+        }
+
+        private float rawRowTop(int i) {
             float y = LIST_TOP + 20 + i * (ROW_H + ROW_GAP);
             if (sectionTitles() != null) for (int start : sectionStarts()) if (start <= i) y += HEADER_H;
             return y;
+        }
+
+        /**
+         * A long list scrolls so the focused row keeps a margin above the bottom edge (it never touches it): the list
+         * moves up only as much as the focused row needs.
+         */
+        private boolean listOverflows() {
+            int rows = rowCount();
+            return rows > 0 && screen != MAIN && screen != HOME_CHOICE && rawRowTop(rows - 1) + ROW_H > 1080 - 120;
+        }
+
+        private float listShift() {
+            int rows = rowCount();
+            if (rows <= 0 || screen == MAIN || screen == HOME_CHOICE) return 0;
+            float last = rawRowTop(rows - 1) + ROW_H, room = 1080 - 120;
+            if (last <= room) return 0;
+            float need = rawRowTop(Math.min(focus, rows - 1)) + ROW_H - room;
+            return Math.max(0, Math.min(last - room, need + (focus < rows - 1 ? ROW_H + ROW_GAP : 0)));
         }
 
         /** Where the text under a list of n rows starts. */
@@ -706,6 +730,7 @@ public class SettingsActivity extends Activity {
         private android.graphics.Bitmap[] miniCards = new android.graphics.Bitmap[3];
         private String[] miniTitles = new String[3];
         private List<HomeApps.Item> miniShelf = new ArrayList<>();
+        private List<android.graphics.Bitmap> miniArts = new ArrayList<>();
         private android.graphics.Bitmap saverImg;
         private String saverCaption, saverMetaText;
 
@@ -810,6 +835,9 @@ public class SettingsActivity extends Activity {
                         cardPics[i] = android.graphics.BitmapFactory.decodeFile(cf.getPath(), co);
                     }
                     List<HomeApps.Item> shelf = HomeApps.shelf(ctx, false);
+                    // Each app's own TV art too, so the preview can show "Arte original do app" while it has focus.
+                    final List<android.graphics.Bitmap> arts = new ArrayList<>();
+                    for (HomeApps.Item si : shelf) arts.add(si.pkg == null ? null : HomeApps.artTile(ctx, si.pkg));
                     // The screensaver's photo: a recommendation's (with its caption) or the screensaver's wallpaper.
                     android.graphics.Bitmap saverPic = null;
                     String saverTitle = null, saverMeta = null;
@@ -840,6 +868,7 @@ public class SettingsActivity extends Activity {
                         miniCards = cardPics;
                         miniTitles = cardTitles;
                         miniShelf = shelf;
+                        miniArts = arts;
                         saverImg = doneSaver;
                         saverCaption = doneTitle;
                         saverMetaText = doneMeta;
@@ -876,9 +905,15 @@ public class SettingsActivity extends Activity {
                             Prefs.recsOn(getContext()) ? Ui.tr("Chave do TMDB, categorias e o que o OK no card abre.", "TMDB key, genres and what OK on a card opens.")
                                     : Ui.tr("A fonte das imagens e qual aparece em cada modo.", "Where the images come from and which shows in each mode.")},
                     {Ui.tr("Ícones da barra", "Shelf icons"), Ui.tr("Seguir o tema: cards claros ou escuros como o Início. Arte original: as cores de cada app.", "Follow the theme: light or dark cards like the home screen. App's own art: each app's colors.")},
+                    {Ui.tr("Tamanho da dock", "Dock size"), Ui.tr("Grande, média ou pequena. A barra encolhe e fica no mesmo lugar.", "Large, medium or small. The bar shrinks and stays in place.")},
+                    {Ui.tr("Bordas no topo", "Top outlines"), Ui.tr("Uma borda fina na pílula do clima e nos botões do topo.", "A thin outline on the weather pill and the top buttons.")},
+                    {Ui.tr("Fundo no topo", "Top background"), Ui.tr("O fundo de vidro da pílula e dos botões do topo. Desligado, ficam só os ícones e o texto.", "The glass behind the top pill and buttons. Off, just the icons and text.")},
+                    {Ui.tr("Bordas da dock", "Dock outline"), Ui.tr("Uma borda fina em volta da dock, com ou sem o fundo.", "A thin outline around the dock, with or without its background.")},
+                    {Ui.tr("Fundo da dock", "Dock background"), Ui.tr("A barra de vidro atrás dos apps. Desligado, ficam só os ícones.", "The glass bar behind the apps. Off, just the icons.")},
+                    {Ui.tr("Bordas do painel", "Panel outlines"), Ui.tr("Uma borda fina nos cards de atalhos, entradas e clima que abrem ao descer.", "A thin outline on the shortcuts, inputs and weather cards below the shelf.")},
                     {Ui.tr("Previsão do tempo", "Weather"), Ui.tr("Cidade e onde o clima aparece no topo.", "City and where the weather shows at the top.")},
                     {Ui.tr("Sons ao navegar", "Navigation sounds"), Ui.tr("Os cliques suaves ao mover o foco.", "The soft clicks when moving the focus.")},
-                    {Ui.tr("TV ao Vivo", "Live TV"), Ui.tr("O app do atalho de TV ao Vivo, na gaveta de baixo.", "The app of the Live TV shortcut, in the bottom drawer.")}};
+                    {Ui.tr("TV ao Vivo", "Live TV"), Ui.tr("O app do atalho de TV ao Vivo, no painel que abre ao descer.", "The app of the Live TV shortcut, in the panel below the shelf.")}};
                 return t[Math.min(focus, t.length - 1)];
             }
             return null;
@@ -907,6 +942,14 @@ public class SettingsActivity extends Activity {
             }
             if (popup == BG_POPUP) recsOn = popupFocus == 0;
             if (popup == WX_POS_POPUP) wxRight = popupFocus == 1;
+            float ds = popup == SIZE_POPUP ? new float[] {1f, 0.84f, 0.68f}[Math.min(2, popupFocus)] : Prefs.dockScale(ctx);
+            boolean art = popup == ART_POPUP ? popupFocus == 1 : Prefs.shelfArt(ctx);
+            boolean topRim = Prefs.topBorders(ctx), topBg = Prefs.topBackground(ctx);
+            boolean dockRim = Prefs.dockBorders(ctx), dockBg = Prefs.dockBackground(ctx);
+            Paint rim = new Paint(Paint.ANTI_ALIAS_FLAG);
+            rim.setStyle(Paint.Style.STROKE);
+            rim.setStrokeWidth(Math.max(1.5f, 2 * pw / 1920f));     // visible even in the small preview
+            rim.setColor(dark ? 0x40FFFFFF : 0x2E000000);     // the home screen's outline colors
             if (popup == YES_NO_POPUP && yesNoKey.equals("weather")) showWx = popupFocus == 0;
             if ((popup == WP_PICK_POPUP || popup == WP_ROTATE_POPUP) && popupFocus < wpNames().size()) {
                 synchronized (wpThumbs) {
@@ -924,7 +967,13 @@ public class SettingsActivity extends Activity {
             p.setColor(dark ? 0x66000000 : 0x73FFFFFF);
             c.drawRect(frame, p);
             float u = pw / 1920f;
-            int glass = dark ? 0x40FFFFFF : 0xB3FFFFFF, ink = dark ? 0xF2FFFFFF : 0xFF1D1D1F;
+            int glass = dark ? 0xA6111113 : 0xB3FFFFFF, ink = dark ? 0xF2FFFFFF : 0xFF1D1D1F;
+            // On "Bordas do painel": only the panel that opens below the shelf, over the blurred background.
+            if (screen == HOMESCR && focus == 9 && popup == NO_POPUP) {
+                drawMiniPanel(c, frame, u, dark, ink, Prefs.panelBorders(ctx), rim);
+                c.restore();
+                return;
+            }
             p.setColor(glass);
             // Top: the weather (middle, or right after the clock), the clock, and the two buttons.
             // Top, live: the weather (icon + temperature + sky), the clock, the network and Settings buttons.
@@ -935,24 +984,37 @@ public class SettingsActivity extends Activity {
             String clock = Ui.clock(System.currentTimeMillis());
             float clockW = pill.measureText(clock) + 60 * u;
             float clockRight = 1650;
-            if (hasWx) {
-                String wtxt = HomeData.degrees(wx.temp) + "  " + HomeData.condition(wx.code, wx.isDay);
+            if (hasWx) {     // one pill: the weather and the time, like the home screen
+                String wtxt = HomeData.degrees(wx.temp);
                 String sym = Symbols.weather(wx.code, wx.isDay);
-                float sw = Symbols.width(ctx, sym, 32 * u), ww = sw + 14 * u + pill.measureText(wtxt) + 60 * u;
+                float sw = Symbols.width(ctx, sym, 32 * u), ww = sw + 14 * u + pill.measureText(wtxt) + 44 * u + pill.measureText(clock) + 60 * u;
                 float wr = wxRight ? 1650 * u : 960 * u + ww / 2, wl = wr - ww;
-                c.drawRoundRect(new RectF(frame.left + wl, frame.top + 70 * u, frame.left + wr, frame.top + 136 * u), 33 * u, 33 * u, p);
+                RectF wp = new RectF(frame.left + wl, frame.top + 70 * u, frame.left + wr, frame.top + 136 * u);
+                if (topBg) c.drawRoundRect(wp, 33 * u, 33 * u, p);
+                if (topRim) c.drawRoundRect(wp, 33 * u, 33 * u, rim);
                 float tx = frame.left + wl + 30 * u, base = frame.top + 103 * u + Ui.halfCap(pill);
                 Symbols.draw(ctx, c, sym, tx + sw / 2, frame.top + 103 * u, 32 * u, ink);
                 c.drawText(wtxt, tx + sw + 14 * u, base, pill);
+                float lx = tx + sw + 14 * u + pill.measureText(wtxt) + 22 * u;
+                p.setColor(dark ? 0x4DFFFFFF : 0x4D1D1D1F);
+                c.drawRect(lx, frame.top + 88 * u, lx + 2 * u, frame.top + 118 * u, p);
+                c.drawText(clock, lx + 22 * u, base, pill);
                 p.setColor(glass);
-                if (wxRight) clockRight = (wl - 20 * u) / u;
+            } else {
+                RectF cr = new RectF(frame.left + clockRight * u - clockW, frame.top + 70 * u, frame.left + clockRight * u, frame.top + 136 * u);
+                if (topBg) c.drawRoundRect(cr, 33 * u, 33 * u, p);
+                if (topRim) c.drawRoundRect(cr, 33 * u, 33 * u, rim);
+                pill.setTextAlign(Paint.Align.CENTER);
+                c.drawText(clock, cr.centerX(), cr.centerY() + Ui.halfCap(pill), pill);
             }
-            RectF cr = new RectF(frame.left + clockRight * u - clockW, frame.top + 70 * u, frame.left + clockRight * u, frame.top + 136 * u);
-            c.drawRoundRect(cr, 33 * u, 33 * u, p);
-            pill.setTextAlign(Paint.Align.CENTER);
-            c.drawText(clock, cr.centerX(), cr.centerY() + Ui.halfCap(pill), pill);
-            c.drawCircle(frame.left + 1716 * u, frame.top + 103 * u, 34 * u, p);
-            c.drawCircle(frame.left + 1806 * u, frame.top + 103 * u, 34 * u, p);
+            if (topBg) {
+                c.drawCircle(frame.left + 1716 * u, frame.top + 103 * u, 34 * u, p);
+                c.drawCircle(frame.left + 1806 * u, frame.top + 103 * u, 34 * u, p);
+            }
+            if (topRim) {
+                c.drawCircle(frame.left + 1716 * u, frame.top + 103 * u, 34 * u, rim);
+                c.drawCircle(frame.left + 1806 * u, frame.top + 103 * u, 34 * u, rim);
+            }
             Symbols.draw(ctx, c, "settings", frame.left + 1806 * u, frame.top + 103 * u, 26 * u, ink);
             Paint wifi = new Paint(Paint.ANTI_ALIAS_FLAG);
             wifi.setStyle(Paint.Style.STROKE);
@@ -979,14 +1041,15 @@ public class SettingsActivity extends Activity {
                 Paint t = Ui.text(Ui.semibold, 70 * u, ink);
                 c.drawText(Ui.tr("Para você", "For You"), frame.left + 80 * u, frame.top + 130 * u, t);
                 Paint tab = Ui.text(Ui.semibold, 30 * u, ink);
-                c.drawText(Ui.tr("Explorar", "Explore"), frame.left + 80 * u, frame.top + 205 * u, tab);
+                c.drawText(Ui.tr("Em alta", "Trending"), frame.left + 80 * u, frame.top + 205 * u, tab);
                 tab.setColor(dark ? 0x99FFFFFF : 0x991D1D1F);
                 c.drawText(Ui.tr("Filmes", "Movies"), frame.left + 250 * u, frame.top + 205 * u, tab);
                 c.drawText(Ui.tr("Séries", "Shows"), frame.left + 390 * u, frame.top + 205 * u, tab);
                 float[][] boxes = {{80, 1120}, {1160, 1480}, {1520, 1840}};
                 Paint cap = Ui.text(Ui.semibold, 30 * u, ink);
                 for (int i = 0; i < 3; i++) {
-                    RectF cb = new RectF(frame.left + boxes[i][0] * u, frame.top + 262 * u, frame.left + boxes[i][1] * u, frame.top + 704 * u);
+                    float lower = (1 - Prefs.dockScale(ctx)) * 206 / 2;
+                    RectF cb = new RectF(frame.left + boxes[i][0] * u, frame.top + (262 + lower) * u, frame.left + boxes[i][1] * u, frame.top + (704 + lower) * u);
                     c.save();
                     android.graphics.Path cc = new android.graphics.Path();
                     cc.addRoundRect(cb, 18 * u, 18 * u, android.graphics.Path.Direction.CW);
@@ -1010,16 +1073,29 @@ public class SettingsActivity extends Activity {
             // The shelf, live: each app's tile (logo on its card), up to what fits.
             p.setColor(glass);
             int apps = Math.max(1, Math.min(5, miniShelf.size()));
-            float tileW = 270, gap = 48, inner = apps * tileW + (apps - 1) * gap, pad = 30;
+            float barTop = 1020 - 205 * ds;
+            float tileW = 270 * ds, gap = 48 * ds, inner = apps * tileW + (apps - 1) * gap, pad = 30 * ds;
             float sl = 960 - inner / 2 - pad, sr = 960 + inner / 2 + pad;
-            c.drawRoundRect(new RectF(frame.left + sl * u, frame.top + 815 * u, frame.left + sr * u, frame.top + 1020 * u), 50 * u, 50 * u, p);
+            RectF bar = new RectF(frame.left + sl * u, frame.top + barTop * u, frame.left + sr * u, frame.top + 1020 * u);
+            if (dockBg) c.drawRoundRect(bar, 50 * ds * u, 50 * ds * u, p);
+            if (dockRim) c.drawRoundRect(bar, 50 * ds * u, 50 * ds * u, rim);
             for (int i = 0; i < apps; i++) {
                 float x0 = frame.left + (960 - inner / 2 + i * (tileW + gap)) * u;
-                RectF tb = new RectF(x0, frame.top + 855 * u, x0 + tileW * u, frame.top + 980 * u);
+                RectF tb = new RectF(x0, frame.top + (barTop + 40 * ds) * u, x0 + tileW * u, frame.top + (barTop + 165 * ds) * u);
                 p.setColor(dark ? 0xEB17181C : 0xFFFFFFFF);
-                c.drawRoundRect(tb, 20 * u, 20 * u, p);
+                c.drawRoundRect(tb, 20 * ds * u, 20 * ds * u, p);
                 if (i >= miniShelf.size()) continue;
                 HomeApps.Item it = miniShelf.get(i);
+                android.graphics.Bitmap own = i < miniArts.size() ? miniArts.get(i) : null;
+                if (art && own != null) {     // "Arte original do app": the app's own TV art fills the tile
+                    c.save();
+                    android.graphics.Path ac = new android.graphics.Path();
+                    ac.addRoundRect(tb, 20 * ds * u, 20 * ds * u, android.graphics.Path.Direction.CW);
+                    c.clipPath(ac);
+                    c.drawBitmap(own, null, tb, bp);
+                    c.restore();
+                    continue;
+                }
                 android.graphics.Bitmap logo = !dark && it.logoDark != null ? it.logoDark : it.logo;
                 if (logo != null) {
                     float sc = Math.min(tb.width() * 0.7f / logo.getWidth(), tb.height() * 0.5f / logo.getHeight());
@@ -1035,6 +1111,114 @@ public class SettingsActivity extends Activity {
                 }
             }
             c.restore();
+        }
+
+        private List<HomeApps.Item> miniInputs;
+
+        /**
+         * The preview of the panel below the shelf, as it really is: the shortcuts (Ajustes do Lume focused), the TV's
+         * inputs with their state, and the live weather (now, next hours, next days), over the blurred background.
+         */
+        private void drawMiniPanel(Canvas c, RectF frame, float u, boolean dark, int ink, boolean outline, Paint rim) {
+            Context ctx = getContext();
+            if (miniInputs == null) miniInputs = HomeApps.allInputs(ctx);
+            Paint p = new Paint(Paint.ANTI_ALIAS_FLAG);
+            p.setColor(dark ? 0x59000000 : 0x40FFFFFF);
+            c.drawRect(frame, p);
+            int dim = dark ? 0xA6FFFFFF : 0xFF6E6E73, cloud = dark ? 0xFFF2F2F5 : 0xFF2C2F36;
+            float pw = 1180, left = 960 - pw / 2;
+            // The two cards together centered on the screen, as on the TV.
+            RectF top = new RectF(frame.left + left * u, frame.top + 105 * u, frame.left + (left + pw) * u, frame.top + 655 * u);
+            RectF bottom = new RectF(top.left, frame.top + 675 * u, top.right, frame.top + 975 * u);
+            Paint card = new Paint(Paint.ANTI_ALIAS_FLAG);
+            card.setColor(dark ? 0xA6111113 : 0xB3FFFFFF);     // the dock's glass, as on the TV
+            for (RectF r : new RectF[] {top, bottom}) {
+                c.drawRoundRect(r, 44 * u, 44 * u, card);
+                if (outline) c.drawRoundRect(r, 44 * u, 44 * u, rim);
+            }
+            Paint head = Ui.text(Ui.semibold, 25 * u, dim);
+            Paint label = Ui.text(Ui.semibold, 30 * u, ink);
+            label.setTextAlign(Paint.Align.CENTER);
+            Paint sub = Ui.text(Ui.medium, 22 * u, dim);
+            sub.setTextAlign(Paint.Align.CENTER);
+            Paint tile = new Paint(Paint.ANTI_ALIAS_FLAG);
+            float inner = pw - 92;
+            c.drawText(Ui.tr("ATALHOS", "SHORTCUTS"), top.left + 52 * u, top.top + 66 * u, head);
+            String[][] shortcuts = {{"settings", Ui.tr("Ajustes do Lume", "Lume Settings")}, {"apps", Ui.tr("Todos os Apps", "All Apps")},
+                    {"tv_settings", Ui.tr("Ajustes da TV", "TV Settings")}};
+            for (int i = 0; i < 3; i++) {
+                float w3 = (inner - 44) / 3, x = left + 46 + i * (w3 + 22);
+                RectF t = new RectF(frame.left + x * u, top.top + 92 * u, frame.left + (x + w3) * u, top.top + 242 * u);
+                boolean on = i == 0;
+                tile.setColor(on ? 0xFFF5F5F7 : dark ? 0xFF26282D : 0xFFE9E9EE);
+                c.drawRoundRect(t, 28 * u, 28 * u, tile);
+                int col = on ? 0xFF1C1C1E : ink;
+                if (i == 0 || !Icons.draw(c, shortcuts[i][0], t.centerX(), t.top + 51 * u, 44 * u, col)) {
+                    Symbols.draw(ctx, c, shortcuts[i][0], t.centerX(), t.top + 51 * u, 40 * u, col);
+                }
+                label.setColor(col);
+                c.drawText(shortcuts[i][1], t.centerX(), t.top + 108 * u, label);
+            }
+            c.drawText(Ui.tr("ENTRADAS", "INPUTS"), top.left + 52 * u, top.top + 330 * u, head);
+            int n = Math.min(4, miniInputs.size());
+            for (int i = 0; i < n; i++) {
+                HomeApps.Item it = miniInputs.get(i);
+                float w4 = (inner - 66) / 4, x = left + 46 + i * (w4 + 22);
+                RectF t = new RectF(frame.left + x * u, top.top + 356 * u, frame.left + (x + w4) * u, top.top + 506 * u);
+                tile.setColor(dark ? 0xFF26282D : 0xFFE9E9EE);
+                c.drawRoundRect(t, 28 * u, 28 * u, tile);
+                boolean input = it.kind == HomeApps.INPUT, off = input && !it.connected;
+                int col = off ? (dark ? 0x6BFFFFFF : 0xFF8E8E93) : ink;
+                if (!Icons.draw(c, it.symbol, t.centerX(), t.top + (input ? 42 : 51) * u, 44 * u, col)) {
+                    Symbols.draw(ctx, c, it.symbol, t.centerX(), t.top + (input ? 42 : 51) * u, 40 * u, col);
+                }
+                label.setColor(col);
+                c.drawText(it.label, t.centerX(), t.top + (input ? 93 : 108) * u, label);
+                if (input) c.drawText(it.connected ? Ui.tr("Conectado", "Connected") : Ui.tr("Desligado", "Off"), t.centerX(), t.top + 126 * u, sub);
+            }
+            // Weather, live.
+            HomeData data = HomeData.get(ctx);
+            HomeData.Weather wx = data.weather;
+            if (Double.isNaN(wx.temp)) return;
+            Paint city = Ui.text(Ui.medium, 40 * u, ink), temp = Ui.numbers(Ui.displaySemibold, 112 * u, ink);
+            Paint text = Ui.text(Ui.medium, 26 * u, ink), small = Ui.text(Ui.medium, 24 * u, dim);
+            float x = bottom.left + 50 * u;
+            c.drawText(data.city.isEmpty() ? Ui.tr("Clima", "Weather") : data.city, x, bottom.top + 74 * u, city);
+            String t = HomeData.degrees(wx.temp);
+            c.drawText(t, x, bottom.top + 184 * u, temp);
+            Icons.weather(c, wx.code, wx.isDay, x + temp.measureText(t) + 70 * u, bottom.top + 140 * u, 100 * u, cloud);
+            c.drawText(HomeData.condition(wx.code, wx.isDay), x, bottom.top + 230 * u, text);
+            c.drawText(Ui.en ? "H: " + HomeData.degrees(wx.max) + "   L: " + HomeData.degrees(wx.min)
+                    : "Máx. " + HomeData.degrees(wx.max) + "   Mín. " + HomeData.degrees(wx.min), x, bottom.top + 266 * u, small);
+            float d1 = bottom.left + 400 * u, d2 = bottom.left + 800 * u;
+            Paint line = new Paint();
+            line.setColor(dark ? 0x1FFFFFFF : 0x1A000000);
+            c.drawRect(d1, bottom.top + 40 * u, d1 + 1.5f * u, bottom.bottom - 40 * u, line);
+            c.drawRect(d2, bottom.top + 40 * u, d2 + 1.5f * u, bottom.bottom - 40 * u, line);
+            c.drawText(Ui.tr("PRÓXIMAS HORAS", "NEXT HOURS"), d1 + 40 * u, bottom.top + 70 * u, head);
+            Paint hour = Ui.text(Ui.medium, 23 * u, ink), htemp = Ui.numbers(Ui.semibold, 34 * u, ink);
+            hour.setTextAlign(Paint.Align.CENTER);
+            htemp.setTextAlign(Paint.Align.CENTER);
+            float cw = (d2 - d1 - 50 * u) / 4;
+            for (int i = 0; i < 4 && i <= wx.hours.size(); i++) {
+                float hc = d1 + 25 * u + cw * (i + 0.5f);
+                int j = i - 1;
+                c.drawText(i == 0 ? Ui.tr("Agora", "Now") : HomeData.hour(wx.hours.get(j)), hc, bottom.top + 122 * u, hour);
+                Icons.weather(c, i == 0 ? wx.code : wx.hourCode.get(j), i == 0 ? wx.isDay : wx.hourDay.get(j), hc, bottom.top + 176 * u, 50 * u, cloud);
+                c.drawText(HomeData.degrees(i == 0 ? wx.temp : wx.hourTemp.get(j)), hc, bottom.top + 248 * u, htemp);
+            }
+            c.drawText(Ui.tr("PRÓXIMOS DIAS", "NEXT DAYS"), d2 + 40 * u, bottom.top + 70 * u, head);
+            Paint day = Ui.text(Ui.medium, 25 * u, ink), num = Ui.numbers(Ui.semibold, 26 * u, ink);
+            num.setTextAlign(Paint.Align.RIGHT);
+            for (int i = 0; i < wx.dayName.size(); i++) {
+                float base = bottom.top + 128 * u + i * 60 * u;
+                c.drawText(wx.dayName.get(i), d2 + 40 * u, base, day);
+                Icons.weather(c, wx.dayCode.get(i), true, d2 + 160 * u, base - 9 * u, 38 * u, cloud);
+                num.setColor(dim);
+                c.drawText(HomeData.degrees(wx.dayMin.get(i)), bottom.right - 124 * u, base, num);
+                num.setColor(ink);
+                c.drawText(HomeData.degrees(wx.dayMax.get(i)), bottom.right - 40 * u, base, num);
+            }
         }
 
         /** A popup's panel: the same frosted photo as the background, veiled like the list's glass cards. */
@@ -1415,19 +1599,27 @@ public class SettingsActivity extends Activity {
             boolean recsOn = Prefs.recsOn(ctx);
             String[] labels = {Ui.tr("Tema", "Theme"), Ui.tr("Fundo", "Background"),
                     recsOn ? Ui.tr("Recomendações", "Recommendations") : Ui.tr("Papel de parede", "Wallpaper"),
-                    Ui.tr("Ícones da barra", "Shelf icons"),
+                    Ui.tr("Ícones da barra", "Shelf icons"), Ui.tr("Tamanho da dock", "Dock size"),
+                    Ui.tr("Bordas no topo", "Top outlines"), Ui.tr("Fundo no topo", "Top background"),
+                    Ui.tr("Bordas da dock", "Dock outline"), Ui.tr("Fundo da dock", "Dock background"),
+                    Ui.tr("Bordas do painel", "Panel outlines"),
                     Ui.tr("Previsão do tempo", "Weather"), Ui.tr("Sons ao navegar", "Navigation sounds"), Ui.tr("TV ao Vivo", "Live TV")};
             String[] values = {themes()[HomeView.theme(ctx)], backgroundName(),
                     recsOn ? (hasKey ? Prefs.genreNames(ctx) : Ui.tr("Sem chave do TMDB", "No TMDB key")) : Wallpapers.sourceName(ctx),
-                    shelfArtNames()[Prefs.shelfArt(ctx) ? 1 : 0],
+                    shelfArtNames()[Prefs.shelfArt(ctx) ? 1 : 0], dockSizeNames()[Prefs.dockSize(ctx)], "", "", "", "", "",
                     weatherName(), Prefs.sounds(ctx) ? Ui.tr("Sim", "On") : Ui.tr("Não", "Off"), liveName()};
-            for (int i = 0; i < 7; i++) {
+            for (int i = 0; i < 13; i++) {
                 layoutRow(i);
                 float f = drawRowBackground(c, i);
                 rowLabel.setColor(blend(fg(0xF2FFFFFF), INK, f));
                 float base = rowRect.centerY() + Ui.halfCap(rowLabel);
                 c.drawText(labels[i], rowIcon(c, HOME_ICONS[i], HOME_COLORS[i]), base, rowLabel);
-                if (i == 5) rowToggle(c, Prefs.sounds(ctx));
+                if (i == 11) rowToggle(c, Prefs.sounds(ctx));
+                else if (i == 5) rowToggle(c, Prefs.topBorders(ctx));
+                else if (i == 6) rowToggle(c, Prefs.topBackground(ctx));
+                else if (i == 7) rowToggle(c, Prefs.dockBorders(ctx));
+                else if (i == 8) rowToggle(c, Prefs.dockBackground(ctx));
+                else if (i == 9) rowToggle(c, Prefs.panelBorders(ctx));
                 else valueAndChevron(c, values[i], base, f);
             }
         }
@@ -1616,12 +1808,16 @@ public class SettingsActivity extends Activity {
                     LIST_X * k + 30 * k, (listEnd(4) + 40) * k, hint);
         }
 
+        private String[] dockSizeNames() {
+            return new String[] {Ui.tr("Grande", "Large"), Ui.tr("Média", "Medium"), Ui.tr("Pequena", "Small")};
+        }
+
         private String[] shelfArtNames() {
             return new String[] {Ui.tr("Seguir o tema", "Follow the theme"), Ui.tr("Arte original do app", "App's own art")};
         }
 
         private String[] wxPosNames() {
-            return new String[] {Ui.tr("No centro", "In the middle"), Ui.tr("Ao lado do relógio", "Next to the clock")};
+            return new String[] {Ui.tr("No centro", "In the middle"), Ui.tr("À direita", "On the right")};
         }
 
         /** Saves the wait with the TV's own ADB (this app may not write system settings itself). */
@@ -1744,6 +1940,7 @@ public class SettingsActivity extends Activity {
             if (popup == WP_SOURCE_POPUP) return Ui.tr("Fonte das imagens", "Image source");
             if (popup == BG_POPUP) return Ui.tr("Fundo", "Background");
             if (popup == ART_POPUP) return Ui.tr("Ícones da barra", "Shelf icons");
+            if (popup == SIZE_POPUP) return Ui.tr("Tamanho da dock", "Dock size");
             if (popup == DOCK_POPUP) return Ui.tr("Apps da barra", "Shelf apps");
             if (popup == WX_POS_POPUP) return Ui.tr("Posição no topo", "Place at the top");
             return popup == THEME_POPUP ? Ui.tr("Tema", "Theme") : popup == GENRE_POPUP ? Ui.tr("Categorias", "Genres")
@@ -1759,6 +1956,7 @@ public class SettingsActivity extends Activity {
             if (popup == WP_MODE_POPUP) return wpModeOptions();
             if (popup == WP_SOURCE_POPUP) return wpSources();
             if (popup == ART_POPUP) return shelfArtNames();
+            if (popup == SIZE_POPUP) return dockSizeNames();
             if (popup == DOCK_POPUP) {
                 int n = Math.min(dockApps.size(), popupPop.length);
                 String[] out = new String[n];
@@ -1802,6 +2000,7 @@ public class SettingsActivity extends Activity {
             if (popup == WP_PICK_POPUP) return Prefs.wallpaper(getContext(), wpSlot).equals("fixed:" + wpNames().get(i));
             if (popup == WP_SOURCE_POPUP) return wpSourceIndex() == i;
             if (popup == ART_POPUP) return Prefs.shelfArt(getContext()) == (i == 1);
+            if (popup == SIZE_POPUP) return Prefs.dockSize(getContext()) == i;
             if (popup == DOCK_POPUP) return HomeApps.shelfPackages(getContext()).contains(dockApps.get(i)[0]);
             if (popup == BG_POPUP) return Prefs.recsOn(getContext()) == (i == 0);
             if (popup == WX_POS_POPUP) return Prefs.weatherRight(getContext()) == (i == 1);
@@ -1893,7 +2092,7 @@ public class SettingsActivity extends Activity {
             popup = kind;
             popupFocus = kind == THEME_POPUP ? HomeView.theme(getContext()) : kind == ACTION_POPUP ? actionIndex() : 0;
             if (kind == LIVE_POPUP || kind == SAVER_POPUP || kind == YES_NO_POPUP || kind == PLACE_POPUP || kind == WP_MODE_POPUP
-                    || kind == WP_PICK_POPUP || kind == WP_SOURCE_POPUP || kind == BG_POPUP || kind == WX_POS_POPUP || kind == ART_POPUP) {
+                    || kind == WP_PICK_POPUP || kind == WP_SOURCE_POPUP || kind == BG_POPUP || kind == WX_POS_POPUP || kind == ART_POPUP || kind == SIZE_POPUP) {
                 for (int i = 0; i < popupOptions().length; i++) if (popupChecked(i)) popupFocus = i;
             }
             for (Spring s : popupPop) s.snap(0);
@@ -1972,11 +2171,15 @@ public class SettingsActivity extends Activity {
                     }
                     return true;
                 case KeyEvent.KEYCODE_BACK:
-                    if (screen == MAIN) return false;   // leaves the settings
+                    if (screen == MAIN) {     // leaves the settings
+                        if (!down && e.getRepeatCount() == 0) click.back();
+                        return false;
+                    }
                     if (down) {
                         if (e.getRepeatCount() == 0) backDown = true;
                     } else {
                         if (backDown && !e.isCanceled()) {
+                            click.back();
                             goBack();
                         }
                         backDown = false;
@@ -2073,6 +2276,9 @@ public class SettingsActivity extends Activity {
                         } else if (popup == ART_POPUP) {
                             Prefs.set(c, "shelf_art", popupFocus == 1);
                             popup = NO_POPUP;
+                        } else if (popup == SIZE_POPUP) {
+                            Prefs.setDockSize(c, popupFocus);
+                            popup = NO_POPUP;
                         } else if (popup == BG_POPUP) {
                             Prefs.set(c, "recs_on", popupFocus == 0);
                             popup = NO_POPUP;
@@ -2094,7 +2300,10 @@ public class SettingsActivity extends Activity {
                     if (down) {
                         if (e.getRepeatCount() == 0) backDown = true;
                     } else {
-                        if (backDown && !e.isCanceled()) popup = NO_POPUP;
+                        if (backDown && !e.isCanceled()) {
+                            popup = NO_POPUP;
+                            click.back();
+                        }
                         backDown = false;
                     }
                     break;
@@ -2108,7 +2317,7 @@ public class SettingsActivity extends Activity {
         /** One level up: Home screen's submenus go back to it, the rest to the main list (on the row they came from). */
         private void goBack() {
             if (screen == THEME || screen == RECS || screen == WALL || screen == WEATHER) {
-                focus = screen == THEME ? 0 : screen == WEATHER ? 4 : 2;
+                focus = screen == THEME ? 0 : screen == WEATHER ? 10 : 2;
                 screen = HOMESCR;
             } else {
                 focus = screen == HOMESCR ? 1 : screen == SAVER ? 2 : screen == UPDATE ? 3 : 0;
@@ -2142,7 +2351,10 @@ public class SettingsActivity extends Activity {
             } else if (screen == UPDATE) {
                 if (focus == 1) installUpdate();
                 else if (focus == 2 && Diagnostics.enabled()) sendDiagnostics();
-                else if (focus == 3) activity.startActivity(new Intent(Settings.ACTION_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
+                else if (focus == 3) {
+                    HomeButton.openTvSettings(c);
+                    activity.startActivity(new Intent(Settings.ACTION_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
+                }
             } else if (screen == WEATHER) {
                 if (focus == 0) openYesNo("weather", Ui.tr("Mostrar previsão", "Show weather"));
                 else if (focus == 1) openPopup(PLACE_POPUP);
@@ -2193,8 +2405,15 @@ public class SettingsActivity extends Activity {
                         if (Wallpapers.names(c).isEmpty()) syncWallpapers();
                     }
                 } else if (focus == 3) openPopup(ART_POPUP);
-                else if (focus == 4) open(WEATHER, 0);
-                else if (focus == 5) openYesNo("sounds", Ui.tr("Sons ao navegar", "Navigation sounds"));
+                else if (focus == 4) openPopup(SIZE_POPUP);
+                else if (focus == 10) open(WEATHER, 0);
+                else if (focus == 11) openYesNo("sounds", Ui.tr("Sons ao navegar", "Navigation sounds"));
+                // Toggles: flip in place.
+                else if (focus == 5) Prefs.set(c, "border_top", !Prefs.topBorders(c));
+                else if (focus == 6) Prefs.set(c, "bg_top", !Prefs.topBackground(c));
+                else if (focus == 7) Prefs.set(c, "border_dock", !Prefs.dockBorders(c));
+                else if (focus == 8) Prefs.set(c, "dock_bg", !Prefs.dockBackground(c));
+                else if (focus == 9) Prefs.set(c, "border_panel", !Prefs.panelBorders(c));
                 else {
                     liveChoices = liveChoices();
                     openPopup(LIVE_POPUP);

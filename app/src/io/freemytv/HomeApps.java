@@ -339,7 +339,7 @@ final class HomeApps {
     }
 
     /** The app's TV art as the card (or its icon on a dark card without art), cached. */
-    private static synchronized Bitmap artTile(Context c, String pkg) {
+    static synchronized Bitmap artTile(Context c, String pkg) {
         String key = "art:" + pkg;
         if (TILES.containsKey(key)) return TILES.get(key);
         Bitmap t = bannerTile(c, pkg);
@@ -455,26 +455,6 @@ final class HomeApps {
         dock(c).edit().putString("order", String.join(",", pkgs)).commit();
     }
 
-    /** Every app that can open on the TV ({package, name}), by name, for Home screen → Apps on the shelf. */
-    static List<String[]> launchableApps(Context c) {
-        PackageManager pm = c.getPackageManager();
-        List<String[]> out = new ArrayList<>();
-        Set<String> seen = new HashSet<>();
-        for (String cat : new String[] {Intent.CATEGORY_LEANBACK_LAUNCHER, Intent.CATEGORY_LAUNCHER}) {
-            for (android.content.pm.ResolveInfo r : pm.queryIntentActivities(new Intent(Intent.ACTION_MAIN).addCategory(cat), 0)) {
-                String pkg = r.activityInfo.packageName;
-                if (pkg.equals(c.getPackageName()) || pkg.equals("com.android.tv.settings") || !seen.add(pkg)) continue;
-                out.add(new String[] {pkg, String.valueOf(r.loadLabel(pm))});
-            }
-        }
-        java.util.Collections.sort(out, (a, b) -> a[1].compareToIgnoreCase(b[1]));
-        return out;
-    }
-
-    static boolean dockFull(Context c) {
-        return shelfPackages(c).size() >= MAX_SHELF;
-    }
-
     private static String label(PackageManager pm, String pkg) {
         try {
             return String.valueOf(pm.getApplicationLabel(pm.getApplicationInfo(pkg, 0)));
@@ -513,10 +493,11 @@ final class HomeApps {
         return shortcut(SETTINGS, "settings", Ui.tr("Ajustes", "Settings"), "settings");
     }
 
-    /** Shortcuts in the bottom drawer. */
+    /** Shortcuts at the top of the panel that opens below the shelf. */
     static List<Item> drawerShortcuts() {
         List<Item> items = new ArrayList<>();
-        items.add(shortcut(SETTINGS, "settings", Ui.tr("Ajustes do Início", "Home Settings"), "settings"));
+        items.add(shortcut(SETTINGS, "settings", Ui.tr("Ajustes do Lume", "Lume Settings"), "settings"));
+        items.add(shortcut(ALL_APPS, "all", Ui.tr("Todos os Apps", "All Apps"), "apps"));
         items.add(shortcut(ANDROID_SETTINGS, "tv-settings", Ui.tr("Ajustes da TV", "TV Settings"), "tv_settings"));
         return items;
     }
@@ -663,9 +644,11 @@ final class HomeApps {
                 intent = new Intent().setComponent(new ComponentName(a, SettingsActivity.class));
                 break;
             case ANDROID_SETTINGS:
+                HomeButton.openTvSettings(a);
                 intent = new Intent(Settings.ACTION_SETTINGS);
                 break;
             case NETWORK:
+                HomeButton.openTvSettings(a);
                 intent = new Intent(Settings.ACTION_WIFI_SETTINGS);
                 if (intent.resolveActivity(a.getPackageManager()) == null) intent = new Intent(Settings.ACTION_WIRELESS_SETTINGS);
                 if (intent.resolveActivity(a.getPackageManager()) == null) intent = new Intent(Settings.ACTION_SETTINGS);

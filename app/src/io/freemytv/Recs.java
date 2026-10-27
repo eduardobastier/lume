@@ -50,6 +50,7 @@ final class Recs {
         String where;           // streaming service in your country (recs_all: even one the TV doesn't have)
         String video;           // YouTube video id (YouTube picks only): "Watch" opens it
         boolean detailed;
+        boolean fresh;          // a new release (the Movies and Shows tabs), not one of the week's trending titles
     }
 
     interface Listener { void onRecs(); }
@@ -58,7 +59,7 @@ final class Recs {
     private static final String IMAGES = "https://image.tmdb.org/t/p/original";
     private static final long LIST_EVERY = 6 * 3600_000L;
     /** Bump when what is saved for each title changes (the saved list is discarded and fetched again). */
-    private static final int CACHE_VERSION = 10;
+    private static final int CACHE_VERSION = 11;
     /** Anime and cartoons never show up (TMDB's Animation genre, the same id for movies and shows). */
     private static final String NO_GENRES = "16";
     private static final int MANHA = 0, TARDE = 1, NOITE = 2;
@@ -268,7 +269,7 @@ final class Recs {
         List<Pick> list = new ArrayList<>();
         if (!hasKey(context)) return list;    // no TMDB key: no recommendations
         for (Pick p : picks) {
-            boolean tab = kind == null ? !youtube() || "video".equals(p.kind) : kind.equals(p.kind);
+            boolean tab = inTab(p, kind);
             if (tab && (!p.detailed || usable(p))) list.add(p);   // app missing: skip
         }
         if (list.isEmpty()) return list;
@@ -289,10 +290,19 @@ final class Recs {
         if (!hasKey(context)) return out;
         java.util.Set<String> seen = new java.util.HashSet<>();
         for (Pick p : picks) {
-            boolean tab = kind == null ? !youtube() || "video".equals(p.kind) : kind.equals(p.kind);
+            boolean tab = inTab(p, kind);
             if (tab && p.detailed && usable(p) && seen.add(franchise(p.title))) out.add(p);
         }
         return out;
+    }
+
+    /**
+     * Which tab a pick goes in: "Em alta" (null) has the week's trending titles; Movies and Shows have the new
+     * releases of their kind. With YouTube picks, the tabs go by kind as before.
+     */
+    private boolean inTab(Pick p, String kind) {
+        if (youtube()) return kind == null ? "video".equals(p.kind) : kind.equals(p.kind);
+        return kind == null ? !p.fresh : kind.equals(p.kind) && p.fresh;
     }
 
     /** "Law & Order: Special Victims Unit" → "law & order" (what comes before ":" or " - "). */
@@ -398,7 +408,7 @@ final class Recs {
      * featured one first), never two from the same franchise.
      */
     List<Pick> showcase() {
-        // The same titles as the home screen's cards, in the same order (Explore first, then Movies and Shows).
+        // The same titles as the home screen's cards, in the same order ("Em alta" first, then Movies and Shows).
         List<Pick> out = new ArrayList<>();
         if (!hasKey(context)) return out;
         java.util.Set<String> seen = new java.util.HashSet<>();
@@ -605,24 +615,33 @@ final class Recs {
                 if (usable(pick)) (kind.equals("movie") ? hotMovies : hotShows).add(pick);
             }
         }
-        // 2. Recent releases on the TV's services: movies from the past year and shows with a new episode in the
-        //    past 3 months.
+        // 2. New on the TV's services: movies that reached streaming in the past months, and shows with a new episode
+        //    in the past 3 weeks (the Movies and Shows tabs).
         String mg = genres("movie"), tg = genres("tv");
         JSONArray movies = get("/discover/movie?vote_count.gte=" + (Prefs.recent(app) ? 10 : 30) + "&primary_release_date.gte=" + day(Prefs.recent(app) ? -MOVIE_DAYS : -365)
                 + "&primary_release_date.lte=" + day(0) + common
                 + (mg.isEmpty() ? "" : "&with_genres=" + URLEncoder.encode(mg, "UTF-8"))).getJSONArray("results");
         JSONArray shows = get("/discover/tv?vote_count.gte=" + (Prefs.recent(app) ? 5 : 20)
                 + (Prefs.recent(app) ? "&first_air_date.gte=" + day(-SHOW_DAYS) + "&first_air_date.lte=" + day(0)
-                          : "&air_date.gte=" + day(-90) + "&air_date.lte=" + day(0))
+                          : "&air_date.gte=" + day(-21) + "&air_date.lte=" + day(0))
                 + common + (tg.isEmpty() ? "" : "&with_genres=" + URLEncoder.encode(tg, "UTF-8"))).getJSONArray("results");
         List<Pick> newMovies = new ArrayList<>(), newShows = new ArrayList<>();
         for (int i = 0; i < movies.length(); i++) add(newMovies, movies.getJSONObject(i), "movie");
         for (int i = 0; i < shows.length(); i++) add(newShows, shows.getJSONObject(i), "tv");
-        // Trending first, then the new releases; movies and shows alternating, without repeats, up to 24.
+        // "Em alta": trending, movies and shows alternating (up to 24). Movies / Shows: the new releases (up to 16
+        // each), never a title already in "Em alta".
         List<Pick> list = new ArrayList<>();
         java.util.Set<String> seen = new java.util.HashSet<>();
         alternate(list, seen, hotMovies, hotShows, 24);
-        alternate(list, seen, newMovies, newShows, 24);
+        for (List<Pick> fresh : java.util.Arrays.asList(newMovies, newShows)) {
+            int n = 0;
+            for (Pick f : fresh) {
+                if (n >= 16 || !seen.add(key(f))) continue;
+                f.fresh = true;
+                list.add(f);
+                n++;
+            }
+        }
         if (list.isEmpty()) throw new IOException("TMDB returned no recommendations");
         picks = list;
         period = p;
@@ -924,7 +943,7 @@ final class Recs {
                         .put("meta", p.meta).put("app", p.app == null ? "" : p.app).put("pkg", p.pkg == null ? "" : p.pkg)
                         .put("detailed", p.detailed).put("video", p.video == null ? "" : p.video)
                         .put("where", p.where == null ? "" : p.where).put("poster", p.poster == null ? "" : p.poster)
-                        .put("overview", p.overview == null ? "" : p.overview).put("trailer", p.trailer == null ? "" : p.trailer));
+                        .put("overview", p.overview == null ? "" : p.overview).put("trailer", p.trailer == null ? "" : p.trailer).put("fresh", p.fresh));
             }
             cache.edit().putString("picks", a.toString()).putInt("period", period).putLong("listAt", listAt)
                     .putBoolean("english", listEnglish)
@@ -952,6 +971,7 @@ final class Recs {
             p.poster = o.optString("poster").isEmpty() ? null : o.optString("poster");
             p.overview = o.optString("overview");
             p.trailer = o.optString("trailer").isEmpty() ? null : o.optString("trailer");
+            p.fresh = o.optBoolean("fresh");
             out.add(p);
         }
         return out;

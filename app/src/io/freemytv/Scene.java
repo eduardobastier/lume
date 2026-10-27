@@ -132,13 +132,6 @@ final class Scene {
         if (liquid != null) liquid.setFloatUniform("mixB", Math.max(0, Math.min(1, t)));
     }
 
-    /** The liquid glass goes back to the frosted aurora. */
-    void clearGlass() {
-        if (!imageGlass) return;
-        imageGlass = false;
-        advance(time);
-    }
-
     private static Bitmap fill(Bitmap b, int[] pixels) {
         if (b == null) b = Bitmap.createBitmap(Backdrop.GW, Backdrop.GH, Bitmap.Config.ARGB_8888);
         b.setPixels(pixels, 0, Backdrop.GW, 0, 0, Backdrop.GW, Backdrop.GH);
@@ -185,14 +178,6 @@ final class Scene {
         Ui.filter(s, BitmapShader.FILTER_MODE_LINEAR);
         glass.setInputShader("frost", s);
         setFrostScale();
-    }
-
-    /** Back to the frosted aurora. */
-    void clearFrost() {
-        if (!imageFrost) return;
-        imageFrost = false;
-        setFrostScale();
-        advance(time);
     }
 
     /** False below Android 13: the glass is flat and doesn't read the background, so a new photo doesn't redraw it. */
@@ -246,6 +231,11 @@ final class Scene {
         glass(c, r, radius, tint, tintAlpha, glow, glowAlpha, lift, body, 1);
     }
 
+    /** Flat glass (no shaders) without its light outline: just the body over its shadow, like the tvOS dock. */
+    boolean noRim;
+    /** The outline's color (light on dark glass, dark on light glass). */
+    int rimColor = 0x33FFFFFF;
+
     /** Same, with an opacity (0 to 1) for the whole glass. */
     void glass(Canvas c, RectF r, float radius, int tint, float tintAlpha, int glow, float glowAlpha, float lift, float body, float alpha) {
         if (alpha <= 0.004f) return;
@@ -254,7 +244,10 @@ final class Scene {
                 flatFill.setColor(Ui.alpha(tint | 0xFF000000, Math.max(0.35f, tintAlpha)));
                 c.drawRoundRect(r, radius, radius, flatFill);
             }
-            c.drawRoundRect(r, radius, radius, flatRim);
+            if (!noRim) {
+                flatRim.setColor(rimColor);
+                c.drawRoundRect(r, radius, radius, flatRim);
+            }
             return;
         }
         float hw = r.width() / 2, hh = r.height() / 2, inner = Math.min(hw, hh);

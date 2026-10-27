@@ -78,7 +78,7 @@ EOF
 # Fonts uncompressed: Android reads them straight from the APK.
 "$BT/aapt2" link -o out/base.apk -I "$AJ" --manifest app/AndroidManifest.xml --java out/gen out/res.zip \
   --rename-manifest-package com.eduardobastier.lume \
-  --min-sdk-version 28 --target-sdk-version 33 -A app/assets -0 ttf
+  --min-sdk-version 28 --target-sdk-version 33 -A app/assets -0 ttf -0 wav
 "$JAVAC" -nowarn -Xlint:-options -source 8 -target 8 -bootclasspath "$AJ:$BT/core-lambda-stubs.jar" -classpath "$AJ" \
   -d out/classes $(find app/src out/gen -name '*.java')
 "$BT/d8" --release --min-api 28 --lib "$AJ" --output out $(find out/classes -name '*.class')
