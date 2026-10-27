@@ -837,7 +837,7 @@ public class SettingsActivity extends Activity {
                     List<HomeApps.Item> shelf = HomeApps.shelf(ctx, false);
                     // Each app's own TV art too, so the preview can show "Arte original do app" while it has focus.
                     final List<android.graphics.Bitmap> arts = new ArrayList<>();
-                    for (HomeApps.Item si : shelf) arts.add(si.pkg == null ? null : HomeApps.artTile(ctx, si.pkg));
+                    for (HomeApps.Item si : shelf) arts.add(si.pkg == null ? null : HomeApps.ownArt(ctx, si.pkg));
                     // The screensaver's photo: a recommendation's (with its caption) or the screensaver's wallpaper.
                     android.graphics.Bitmap saverPic = null;
                     String saverTitle = null, saverMeta = null;

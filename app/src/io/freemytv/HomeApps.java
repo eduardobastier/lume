@@ -339,6 +339,11 @@ final class HomeApps {
     }
 
     /** The app's TV art as the card (or its icon on a dark card without art), cached. */
+    /** "Arte original do app" as All Apps shows it: icon-only apps on their icon's card, the rest with their TV art. */
+    static Bitmap ownArt(Context c, String pkg) {
+        return iconOnly(pkg, label(c.getPackageManager(), pkg)) ? iconCard(c, pkg) : artTile(c, pkg);
+    }
+
     static synchronized Bitmap artTile(Context c, String pkg) {
         String key = "art:" + pkg;
         if (TILES.containsKey(key)) return TILES.get(key);

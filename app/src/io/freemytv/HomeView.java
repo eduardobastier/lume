@@ -507,6 +507,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
 
     @Override public void onRecs() {
         updatePicks();
+        handler.postDelayed(this::warmTabs, 1500);     // after this tab's own cards
     }
 
     private void invalidateAll() {
@@ -2408,6 +2409,20 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         synopsisLayout = null;
         heroDirty = true;
         return true;
+    }
+
+    /** The other tabs' cards, decoded ahead in the background: switching tabs shows them right away. */
+    private void warmTabs() {
+        for (int t = 0; t < TAB_KIND.length; t++) {
+            if (t == tab) continue;
+            List<Recs.Pick> pool = recs.pool(TAB_KIND[t]);
+            if (pool.isEmpty()) continue;
+            if (pool.size() <= 3) {
+                for (Recs.Pick p : pool) recs.backdrop(p);
+            } else {
+                for (int i = 0; i < 3; i++) recs.backdrop(pool.get(slots[i] % pool.size()));
+            }
+        }
     }
 
     /** The cards in view: three in a row from the tab's pool, starting at `rotation`. */
