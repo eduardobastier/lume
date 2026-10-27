@@ -787,6 +787,8 @@ public class SettingsActivity extends Activity {
         }
         private boolean blurLoading;
 
+        private int previewRetries;
+
         private void loadBlurBg() {
             if (blurLoading || blurBg != null) return;
             blurLoading = true;
@@ -873,9 +875,23 @@ public class SettingsActivity extends Activity {
                         saverCaption = doneTitle;
                         saverMetaText = doneMeta;
                         invalidate();
+                        // Right after the data was cleared the recommendations are still downloading: try again
+                        // shortly, until the preview has its photos (at most a couple of minutes).
+                        boolean missing = Prefs.recsOn(ctx) && (done == null || cardPics[0] == null);
+                        blurLoading = false;
+                        if (missing && previewRetries++ < 40) {
+                            Recs.get(ctx).refreshIfStale();
+                            handler.postDelayed(() -> {
+                                if (blurBg == done) {
+                                    blurBg = null;
+                                    loadBlurBg();
+                                }
+                            }, 3000);
+                        }
                     });
                 } catch (RuntimeException | OutOfMemoryError e) {
                     AppLog.w("settings backdrop: " + e.getMessage());
+                    handler.post(() -> blurLoading = false);
                 }
             }, "settings-backdrop").start();
         }
