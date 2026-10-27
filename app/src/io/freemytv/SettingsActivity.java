@@ -1048,7 +1048,7 @@ public class SettingsActivity extends Activity {
                 float[][] boxes = {{80, 1120}, {1160, 1480}, {1520, 1840}};
                 Paint cap = Ui.text(Ui.semibold, 30 * u, ink);
                 for (int i = 0; i < 3; i++) {
-                    float lower = (1 - Prefs.dockScale(ctx)) * 206 / 2;
+                    float lower = (1 - ds) * 206 / 2;     // follows the focused size while choosing
                     RectF cb = new RectF(frame.left + boxes[i][0] * u, frame.top + (262 + lower) * u, frame.left + boxes[i][1] * u, frame.top + (704 + lower) * u);
                     c.save();
                     android.graphics.Path cc = new android.graphics.Path();
