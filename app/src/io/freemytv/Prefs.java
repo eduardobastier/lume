@@ -200,7 +200,7 @@ final class Prefs {
 
     /** Outlines and backgrounds, each on its own: the top's pills and buttons, the dock, the panel below. */
     static boolean topBorders(Context c) {
-        return ui(c).getBoolean("border_top", ui(c).getBoolean("borders", false));
+        return ui(c).getBoolean("border_top", ui(c).getBoolean("borders", true));
     }
 
     static boolean topBackground(Context c) {
@@ -208,7 +208,7 @@ final class Prefs {
     }
 
     static boolean dockBorders(Context c) {
-        return ui(c).getBoolean("border_dock", ui(c).getBoolean("borders", false));
+        return ui(c).getBoolean("border_dock", ui(c).getBoolean("borders", true));
     }
 
     /** The glass bar behind the dock's apps (off: just the apps). */
@@ -217,7 +217,7 @@ final class Prefs {
     }
 
     static boolean panelBorders(Context c) {
-        return ui(c).getBoolean("border_panel", ui(c).getBoolean("borders", false));
+        return ui(c).getBoolean("border_panel", ui(c).getBoolean("borders", true));
     }
 
     static void set(Context c, String key, boolean value) {
